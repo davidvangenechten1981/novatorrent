@@ -33,8 +33,7 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         yield
         await run_in_threadpool(engine.stop)
 
-    app = FastAPI(title="NovaTorrent", lifespan=lifespan, docs_url=None, redoc_url=None,
-                  openapi_url=None)
+    app = FastAPI(title="NovaTorrent", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.engine, app.state.auth, app.state.settings, app.state.qb = engine, auth, settings, qb
 
     @app.get("/api/health")
@@ -70,8 +69,9 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if route == "auth/login":
             wait = auth.locked_for(ip)
             if wait:
-                return PlainTextResponse(f"Your IP address has been banned for {wait}s "
-                                         "after too many failed authentication attempts.", 403)
+                return PlainTextResponse(
+                    f"Your IP address has been banned for {wait}s after too many failed authentication attempts.", 403
+                )
             role = await run_in_threadpool(auth.verify, params.s("username"), params.s("password"))
             if not role:
                 auth.record_fail(ip)

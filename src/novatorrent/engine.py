@@ -67,7 +67,7 @@ class Engine:
         self._load_resume()
         self._thread = threading.Thread(target=self._alert_loop, name="alerts", daemon=True)
         self._thread.start()
-        self.add_log("NovaTorrent engine started (libtorrent %s)" % lt.__version__)
+        self.add_log(f"NovaTorrent engine started (libtorrent {lt.__version__})")
 
     def stop(self, timeout: float = 30.0) -> None:
         if not self.ses:
@@ -88,8 +88,9 @@ class Engine:
     # ---- logging ---------------------------------------------------------------------------
     def add_log(self, message: str, level: int = 1) -> None:
         # level follows qBittorrent: 1 normal, 2 info, 4 warning, 8 critical
-        self.logs.append({"id": len(self.logs), "message": message,
-                          "timestamp": int(time.time() * 1000), "type": level})
+        self.logs.append(
+            {"id": len(self.logs), "message": message, "timestamp": int(time.time() * 1000), "type": level}
+        )
 
     # ---- resume data -----------------------------------------------------------------------
     def _load_resume(self) -> None:
@@ -188,6 +189,13 @@ class Engine:
             self.add_log(a.message(), 2 if isinstance(a, lt.listen_succeeded_alert) else 4)
 
     def _on_complete(self, handle: Any, h: str) -> None:
+        final = self.meta(h).get("final_path")
+        if final:  # "move on complete": same-volume moves are atomic renames
+            try:
+                Path(final).mkdir(parents=True, exist_ok=True)
+                handle.move_storage(final)
+            except Exception as e:
+                self.add_log(f"move on complete failed: {e}", 8)
         name = handle.status().name
         self.add_log(f"Torrent finished: {name}", 2)
         self.on_event("completed", {"hash": h, "name": name})
@@ -207,11 +215,22 @@ class Engine:
         cat = self.state.get("categories", {}).get(category or "", {})
         return cat.get("savePath") or self.settings.get("save_path")
 
-    def add(self, *, magnet: str | None = None, data: bytes | None = None, save_path: str | None = None,
-            category: str = "", tags: list[str] | None = None, paused: bool = False,
-            sequential: bool = False, first_last: bool = False,
-            up_limit: int = -1, dl_limit: int = -1, ratio_limit: float = -2,
-            seeding_time_limit: int = -2) -> str:
+    def add(
+        self,
+        *,
+        magnet: str | None = None,
+        data: bytes | None = None,
+        save_path: str | None = None,
+        category: str = "",
+        tags: list[str] | None = None,
+        paused: bool = False,
+        sequential: bool = False,
+        first_last: bool = False,
+        up_limit: int = -1,
+        dl_limit: int = -1,
+        ratio_limit: float = -2,
+        seeding_time_limit: int = -2,
+    ) -> str:
         if magnet:
             params = lt.parse_magnet_uri(magnet)
         elif data:
@@ -219,10 +238,15 @@ class Engine:
             params.ti = lt.torrent_info(lt.bdecode(data))
         else:
             raise ValueError("nothing to add")
-        h = str(params.info_hashes.v1 if params.info_hashes.has_v1() else params.info_hashes.v2)[:40]
+        ih = params.ti.info_hashes() if data and not magnet else params.info_hashes
+        h = str(ih.v1 if ih.has_v1() else ih.v2)[:40]
         if self._find(h):
             return h  # duplicates are accepted silently, like qBittorrent
-        params.save_path = self.resolve_save_path(category, save_path)
+        final_path = self.resolve_save_path(category, save_path)
+        params.save_path = final_path
+        use_temp = bool(self.settings.get("temp_path_enabled") and self.settings.get("temp_path"))
+        if use_temp:
+            params.save_path = self.settings.get("temp_path")
         Path(params.save_path).mkdir(parents=True, exist_ok=True)
         flags = params.flags
         flags &= ~lt.torrent_flags.duplicate_is_error
@@ -245,16 +269,29 @@ class Engine:
             extra = [t.strip() for t in self.settings.get("nova_extra_trackers").split() if t.strip()]
             params.trackers = list(params.trackers) + [t for t in extra if t not in params.trackers]
         self.ses.add_torrent(params)
+        self.invalidate()
         m = self.meta(h)
-        m.update({"category": category or "", "tags": sorted(set(tags or [])),
-                  "added_on": int(time.time()), "completion_on": 0,
-                  "ratio_limit": ratio_limit, "seeding_time_limit": seeding_time_limit,
-                  "inactive_seeding_time_limit": -2, "first_last": bool(first_last),
-                  "seen_complete": 0})
+        m.update(
+            {
+                "category": category or "",
+                "tags": sorted(set(tags or [])),
+                "added_on": int(time.time()),
+                "completion_on": 0,
+                "ratio_limit": ratio_limit,
+                "seeding_time_limit": seeding_time_limit,
+                "inactive_seeding_time_limit": -2,
+                "first_last": bool(first_last),
+                "seen_complete": 0,
+                "final_path": final_path if use_temp else "",
+            }
+        )
         self._save_meta()
         self.add_log(f"Torrent added: {h}", 2)
         self.on_event("added", {"hash": h, "name": h})
         return h
+
+    def invalidate(self) -> None:
+        self._status_cache = (0.0, {})
 
     def _find(self, h: str) -> Any | None:
         if not self.ses or not HASH_RE.match(h):
@@ -279,6 +316,7 @@ class Engine:
         if not handle:
             return False
         self.ses.remove_torrent(handle, lt.session.delete_files if delete_files else 0)
+        self.invalidate()
         for ext in ("fastresume", "corrupt"):
             p = self.resume_dir / f"{h}.{ext}"
             if p.exists():
@@ -292,6 +330,7 @@ class Engine:
     # ---- control ----------------------------------------------------------------------------
     def pause(self, h: str) -> None:
         handle = self.handle(h)
+        self.invalidate()
         if handle:
             handle.unset_flags(lt.torrent_flags.auto_managed)
             handle.pause()
@@ -299,6 +338,7 @@ class Engine:
 
     def resume(self, h: str, force: bool = False) -> None:
         handle = self.handle(h)
+        self.invalidate()
         if not handle:
             return
         if force:
@@ -312,6 +352,7 @@ class Engine:
 
     def recheck(self, h: str) -> None:
         handle = self.handle(h)
+        self.invalidate()
         if handle:
             handle.force_recheck()
 
@@ -324,8 +365,12 @@ class Engine:
         handle = self.handle(h)
         if not handle:
             return
-        {"top": handle.queue_position_top, "bottom": handle.queue_position_bottom,
-         "up": handle.queue_position_up, "down": handle.queue_position_down}[how]()
+        {
+            "top": handle.queue_position_top,
+            "bottom": handle.queue_position_bottom,
+            "up": handle.queue_position_up,
+            "down": handle.queue_position_down,
+        }[how]()
 
     def set_location(self, h: str, path: str) -> None:
         handle = self.handle(h)
@@ -344,7 +389,9 @@ class Engine:
         ts, cache = self._status_cache
         if time.time() - ts < max_age:
             return cache
-        sts = self.ses.get_torrent_status(lambda s: True, 0)
+        # NOTE: ses.get_torrent_status(pred) with a Python predicate crashes (access violation)
+        # when called concurrently with the alert thread, so poll handles one by one.
+        sts = [h.status() for h in self.ses.get_torrents() if h.is_valid()]
         cache = {thash(s.handle): s for s in sts}
         self._status_cache = (time.time(), cache)
         return cache
@@ -353,8 +400,7 @@ class Engine:
         flags = s.flags
         paused = bool(flags & lt.torrent_flags.paused)
         auto = bool(flags & lt.torrent_flags.auto_managed)
-        complete = s.progress >= 1.0 or s.state in (lt.torrent_status.seeding,
-                                                    lt.torrent_status.finished)
+        complete = s.progress >= 1.0 or s.state in (lt.torrent_status.seeding, lt.torrent_status.finished)
         forced = bool(m.get("force_start"))
         if s.errc.value():
             return "error"
@@ -412,42 +458,73 @@ class Engine:
         state = self.qb_state(s, m)
         flags = s.flags
         return {
-            "hash": h, "infohash_v1": h, "infohash_v2": "", "name": s.name or h,
+            "hash": h,
+            "infohash_v1": h,
+            "infohash_v2": "",
+            "name": s.name or h,
             "magnet_uri": lt.make_magnet_uri(s.handle) if s.handle.is_valid() else "",
-            "size": size, "total_size": total, "progress": round(s.progress, 6),
-            "dlspeed": ds, "upspeed": us, "eta": eta, "state": state,
-            "category": m.get("category", ""), "tags": ", ".join(m.get("tags", [])),
-            "save_path": s.save_path, "download_path": "", "content_path": self.content_path(s),
-            "ratio": round(ratio, 4), "ratio_limit": m.get("ratio_limit", -2),
+            "size": size,
+            "total_size": total,
+            "progress": round(s.progress, 6),
+            "dlspeed": ds,
+            "upspeed": us,
+            "eta": eta,
+            "state": state,
+            "category": m.get("category", ""),
+            "tags": ", ".join(m.get("tags", [])),
+            "save_path": s.save_path,
+            "download_path": "",
+            "content_path": self.content_path(s),
+            "ratio": round(ratio, 4),
+            "ratio_limit": m.get("ratio_limit", -2),
             "seeding_time": secs(s.seeding_duration),
             "seeding_time_limit": m.get("seeding_time_limit", -2),
             "inactive_seeding_time_limit": m.get("inactive_seeding_time_limit", -2),
             "time_active": secs(s.active_duration),
-            "added_on": m.get("added_on", 0), "completion_on": m.get("completion_on", 0) or -1,
+            "added_on": m.get("added_on", 0),
+            "completion_on": m.get("completion_on", 0) or -1,
             "last_activity": int(time.time()) - max(secs(s.time_since_upload), 0),
             "seen_complete": m.get("seen_complete", 0),
-            "amount_left": left, "completed": s.total_wanted_done,
-            "downloaded": dl_all, "uploaded": ul_all,
-            "downloaded_session": s.total_payload_download, "uploaded_session": s.total_payload_upload,
-            "num_seeds": s.num_seeds, "num_leechs": s.num_peers - s.num_seeds,
-            "num_complete": s.list_seeds, "num_incomplete": s.list_peers - s.list_seeds,
+            "amount_left": left,
+            "completed": s.total_wanted_done,
+            "downloaded": dl_all,
+            "uploaded": ul_all,
+            "downloaded_session": s.total_payload_download,
+            "uploaded_session": s.total_payload_upload,
+            "num_seeds": s.num_seeds,
+            "num_leechs": s.num_peers - s.num_seeds,
+            "num_complete": s.list_seeds,
+            "num_incomplete": s.list_peers - s.list_seeds,
             "priority": s.queue_position + 1 if s.queue_position >= 0 else 0,
-            "tracker": trackers, "trackers_count": 0,
-            "dl_limit": s.handle.download_limit() or -1, "up_limit": s.handle.upload_limit() or -1,
+            "tracker": trackers,
+            "trackers_count": 0,
+            "dl_limit": s.handle.download_limit() or -1,
+            "up_limit": s.handle.upload_limit() or -1,
             "seq_dl": bool(flags & lt.torrent_flags.sequential_download),
             "f_l_piece_prio": bool(m.get("first_last")),
             "force_start": bool(m.get("force_start")),
-            "auto_tmm": False, "super_seeding": bool(flags & lt.torrent_flags.super_seeding),
-            "availability": round(s.distributed_copies, 3), "max_ratio": -1, "max_seeding_time": -1,
+            "auto_tmm": False,
+            "super_seeding": bool(flags & lt.torrent_flags.super_seeding),
+            "availability": round(s.distributed_copies, 3),
+            "max_ratio": -1,
+            "max_seeding_time": -1,
             "reannounce": 0,
         }
 
-    def list_info(self, *, hashes: list[str] | None = None, category: str | None = None,
-                  tag: str | None = None, filter_: str = "all") -> list[dict[str, Any]]:
+    def list_info(
+        self,
+        *,
+        hashes: list[str] | None = None,
+        category: str | None = None,
+        tag: str | None = None,
+        filter_: str = "all",
+    ) -> list[dict[str, Any]]:
         out = []
         sts = self.statuses()
         for h, s in sts.items():
             if hashes is not None and h not in hashes:
+                continue
+            if not s.handle.is_valid():
                 continue
             info = self.info(s)
             if category is not None and info["category"] != category:
@@ -475,20 +552,41 @@ class Engine:
         out = []
         for i in range(fs.num_files()):
             size = fs.file_size(i)
-            out.append({"index": i, "name": fs.file_path(i).replace("\\", "/"), "size": size,
-                        "progress": (prog[i] / size) if size else 1.0,
-                        "priority": map_priority_from_lt(prios[i]), "is_seed": st.is_seeding,
-                        "piece_range": [0, 0], "availability": 1.0})
+            out.append(
+                {
+                    "index": i,
+                    "name": fs.file_path(i).replace("\\", "/"),
+                    "size": size,
+                    "progress": (prog[i] / size) if size else 1.0,
+                    "priority": map_priority_from_lt(prios[i]),
+                    "is_seed": st.is_seeding,
+                    "piece_range": [0, 0],
+                    "availability": 1.0,
+                }
+            )
         return out
 
     def trackers(self, h: str) -> list[dict[str, Any]] | None:
         handle = self.handle(h)
         if not handle:
             return None
-        out = [{"url": f"** [{n}] **", "status": 2 if on else 0, "tier": -1, "num_peers": 0,
-                "num_seeds": 0, "num_leeches": 0, "num_downloaded": 0, "msg": ""}
-               for n, on in (("DHT", self.settings.get("dht")), ("PeX", self.settings.get("pex")),
-                             ("LSD", self.settings.get("lsd")))]
+        out = [
+            {
+                "url": f"** [{n}] **",
+                "status": 2 if on else 0,
+                "tier": -1,
+                "num_peers": 0,
+                "num_seeds": 0,
+                "num_leeches": 0,
+                "num_downloaded": 0,
+                "msg": "",
+            }
+            for n, on in (
+                ("DHT", self.settings.get("dht")),
+                ("PeX", self.settings.get("pex")),
+                ("LSD", self.settings.get("lsd")),
+            )
+        ]
         for t in handle.trackers():
             status, msg, seeds, leeches = 1, "", 0, 0
             for ep in t.get("endpoints", []):
@@ -497,14 +595,27 @@ class Engine:
                         status = max(status, 3)
                     elif ih.get("fails", 0) > 0:
                         status = 4
-                        msg = ep.get("message") or ih.get("last_error", {}).get("message", "") \
-                            if isinstance(ih.get("last_error"), dict) else ep.get("message", "")
+                        msg = (
+                            ep.get("message") or ih.get("last_error", {}).get("message", "")
+                            if isinstance(ih.get("last_error"), dict)
+                            else ep.get("message", "")
+                        )
                     elif ih.get("start_sent") or ih.get("complete_sent") or ep.get("message") is not None:
                         status = max(status, 2) if status != 4 else 4
                     seeds = max(seeds, ih.get("scrape_complete", 0) or 0)
                     leeches = max(leeches, ih.get("scrape_incomplete", 0) or 0)
-            out.append({"url": t["url"], "status": status, "tier": t.get("tier", 0), "num_peers": 0,
-                        "num_seeds": seeds, "num_leeches": leeches, "num_downloaded": 0, "msg": msg})
+            out.append(
+                {
+                    "url": t["url"],
+                    "status": status,
+                    "tier": t.get("tier", 0),
+                    "num_peers": 0,
+                    "num_seeds": seeds,
+                    "num_leeches": leeches,
+                    "num_downloaded": 0,
+                    "msg": msg,
+                }
+            )
         return out
 
     def peers(self, h: str) -> dict[str, Any]:
@@ -515,12 +626,20 @@ class Engine:
         for pi in handle.get_peer_info():
             ip, port = pi.ip
             out[f"{ip}:{port}"] = {
-                "ip": ip, "port": port, "client": pi.client if isinstance(pi.client, str)
-                else pi.client.decode(errors="replace"), "progress": pi.progress,
-                "dl_speed": pi.payload_down_speed, "up_speed": pi.payload_up_speed,
-                "downloaded": pi.total_download, "uploaded": pi.total_upload,
-                "flags": "", "connection": "uTP" if pi.flags & pi.utp_socket else "BT",
-                "country": "", "country_code": "", "relevance": pi.progress, "files": "",
+                "ip": ip,
+                "port": port,
+                "client": pi.client if isinstance(pi.client, str) else pi.client.decode(errors="replace"),
+                "progress": pi.progress,
+                "dl_speed": pi.payload_down_speed,
+                "up_speed": pi.payload_up_speed,
+                "downloaded": pi.total_download,
+                "uploaded": pi.total_upload,
+                "flags": "",
+                "connection": "uTP" if pi.flags & pi.utp_socket else "BT",
+                "country": "",
+                "country_code": "",
+                "relevance": pi.progress,
+                "files": "",
             }
         return out
 
@@ -538,8 +657,7 @@ class Engine:
     def edit_tracker(self, h: str, old: str, new: str) -> None:
         handle = self.handle(h)
         if handle:
-            ts = [{"url": new if t["url"] == old else t["url"], "tier": t["tier"]}
-                  for t in handle.trackers()]
+            ts = [{"url": new if t["url"] == old else t["url"], "tier": t["tier"]} for t in handle.trackers()]
             handle.replace_trackers(ts)
 
     def server_state(self) -> dict[str, Any]:
@@ -548,25 +666,37 @@ class Engine:
         dl_all = sum(s.all_time_download for s in sts.values())
         ul_all = sum(s.all_time_upload for s in sts.values())
         try:
-            free = os.statvfs(self.settings.get("save_path")).f_bavail * \
-                os.statvfs(self.settings.get("save_path")).f_frsize
+            free = (
+                os.statvfs(self.settings.get("save_path")).f_bavail
+                * os.statvfs(self.settings.get("save_path")).f_frsize
+            )
         except (OSError, AttributeError):
             import shutil
+
             try:
                 free = shutil.disk_usage(self.settings.get("save_path")).free
             except OSError:
                 free = 0
         return {
             "connection_status": "connected" if st.has_incoming_connections or st.num_peers else "firewalled",
-            "dht_nodes": st.dht_nodes, "dl_info_data": st.total_payload_download,
-            "dl_info_speed": st.payload_download_rate, "dl_rate_limit": self.settings.get("dl_limit"),
-            "up_info_data": st.total_payload_upload, "up_info_speed": st.payload_upload_rate,
-            "up_rate_limit": self.settings.get("up_limit"), "free_space_on_disk": free,
+            "dht_nodes": st.dht_nodes,
+            "dl_info_data": st.total_payload_download,
+            "dl_info_speed": st.payload_download_rate,
+            "dl_rate_limit": self.settings.get("dl_limit"),
+            "up_info_data": st.total_payload_upload,
+            "up_info_speed": st.payload_upload_rate,
+            "up_rate_limit": self.settings.get("up_limit"),
+            "free_space_on_disk": free,
             "global_ratio": f"{(ul_all / dl_all) if dl_all else 0:.2f}",
-            "alltime_dl": dl_all, "alltime_ul": ul_all, "queueing": self.settings.get("queueing_enabled"),
+            "alltime_dl": dl_all,
+            "alltime_ul": ul_all,
+            "queueing": self.settings.get("queueing_enabled"),
             "use_alt_speed_limits": bool(self.settings.get("alt_speed_active")),
-            "refresh_interval": 1500, "total_peer_connections": st.num_peers,
-            "use_subcategories": False, "write_cache_overload": "0", "read_cache_overload": "0",
+            "refresh_interval": 1500,
+            "total_peer_connections": st.num_peers,
+            "use_subcategories": False,
+            "write_cache_overload": "0",
+            "read_cache_overload": "0",
         }
 
 
@@ -575,8 +705,17 @@ def _matches_filter(info: dict[str, Any], f: str) -> bool:
     if f in ("all", ""):
         return True
     if f == "downloading":
-        return s in ("downloading", "metaDL", "forcedMetaDL", "stalledDL", "forcedDL",
-                     "queuedDL", "checkingDL", "pausedDL", "allocating")
+        return s in (
+            "downloading",
+            "metaDL",
+            "forcedMetaDL",
+            "stalledDL",
+            "forcedDL",
+            "queuedDL",
+            "checkingDL",
+            "pausedDL",
+            "allocating",
+        )
     if f == "seeding":
         return s in ("uploading", "stalledUP", "forcedUP", "queuedUP", "checkingUP")
     if f == "completed":

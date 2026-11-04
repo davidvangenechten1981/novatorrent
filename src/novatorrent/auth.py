@@ -45,8 +45,9 @@ class AuthStore:
         user = os.environ.get("NOVA_ADMIN_USER", "admin")
         if not pw:
             pw = secrets.token_urlsafe(14)
-            atomic_write(self.config_dir / "initial_password.txt",
-                         f"user: {user}\npassword: {pw}\n".encode(), mode=0o600)
+            atomic_write(
+                self.config_dir / "initial_password.txt", f"user: {user}\npassword: {pw}\n".encode(), mode=0o600
+            )
         self.data["users"][user] = {"hash": self.ph.hash(pw), "role": "admin"}
         self._save()
 
@@ -89,7 +90,10 @@ class AuthStore:
         token = "nt_" + secrets.token_urlsafe(32)
         with self.lock:
             self.data["api_keys"][hashlib.sha256(token.encode()).hexdigest()] = {
-                "name": name, "role": role, "created": int(time.time())}
+                "name": name,
+                "role": role,
+                "created": int(time.time()),
+            }
             self._save()
         return token  # shown once, only the hash is stored
 

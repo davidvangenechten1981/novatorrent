@@ -32,9 +32,7 @@ def main() -> int:
     else:
         return 0
     try:
-        res = subprocess.run(
-            cmd, cwd=root, capture_output=True, text=True, timeout=60, check=False
-        )
+        res = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=60, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return 0
     if res.returncode != 0:

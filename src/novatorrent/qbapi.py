@@ -15,12 +15,28 @@ WEBAPI_VERSION = "2.9.3"
 APP_VERSION = "v4.6.7"
 
 READONLY_OK = {
-    "app/version", "app/webapiVersion", "app/preferences", "app/buildInfo",
-    "torrents/info", "torrents/properties", "torrents/files", "torrents/trackers",
-    "torrents/categories", "torrents/tags", "torrents/count", "torrents/countFiles",
-    "transfer/info", "sync/maindata", "sync/torrentPeers", "transfer/speedLimitsMode",
-    "transfer/downloadLimit", "transfer/uploadLimit", "log/main", "auth/logout",
-    "torrents/pieceStates", "torrents/webseeds",
+    "app/version",
+    "app/webapiVersion",
+    "app/preferences",
+    "app/buildInfo",
+    "torrents/info",
+    "torrents/properties",
+    "torrents/files",
+    "torrents/trackers",
+    "torrents/categories",
+    "torrents/tags",
+    "torrents/count",
+    "torrents/countFiles",
+    "transfer/info",
+    "sync/maindata",
+    "sync/torrentPeers",
+    "transfer/speedLimitsMode",
+    "transfer/downloadLimit",
+    "transfer/uploadLimit",
+    "log/main",
+    "auth/logout",
+    "torrents/pieceStates",
+    "torrents/webseeds",
 }
 
 
@@ -80,8 +96,10 @@ class QbApi:
 
     def h_app_buildInfo(self, p: Params) -> Response:
         import libtorrent as lt
-        return Response({"qt": "6", "libtorrent": lt.__version__, "boost": "1", "openssl": "3",
-                         "bitness": 64}, media="json")
+
+        return Response(
+            {"qt": "6", "libtorrent": lt.__version__, "boost": "1", "openssl": "3", "bitness": 64}, media="json"
+        )
 
     def h_app_shutdown(self, p: Params) -> Response:
         return OK
@@ -108,8 +126,7 @@ class QbApi:
             return Response("Bad Request", 400)
         values = {k: v for k, v in values.items() if k in DEFAULTS and k != "web_ui_port"}
         for k, v in list(values.items()):
-            if type(v) is not type(DEFAULTS[k]) and not (isinstance(DEFAULTS[k], float)
-                                                         and isinstance(v, int)):
+            if type(v) is not type(DEFAULTS[k]) and not (isinstance(DEFAULTS[k], float) and isinstance(v, int)):
                 if isinstance(DEFAULTS[k], bool) and isinstance(v, int):
                     values[k] = bool(v)
                 elif isinstance(DEFAULTS[k], int) and isinstance(v, float):
@@ -123,9 +140,22 @@ class QbApi:
     # ---- transfer -------------------------------------------------------------------------
     def h_transfer_info(self, p: Params) -> Response:
         s = self.e.server_state()
-        return Response({k: s[k] for k in ("connection_status", "dht_nodes", "dl_info_data",
-                         "dl_info_speed", "dl_rate_limit", "up_info_data", "up_info_speed",
-                         "up_rate_limit")}, media="json")
+        return Response(
+            {
+                k: s[k]
+                for k in (
+                    "connection_status",
+                    "dht_nodes",
+                    "dl_info_data",
+                    "dl_info_speed",
+                    "dl_rate_limit",
+                    "up_info_data",
+                    "up_info_speed",
+                    "up_rate_limit",
+                )
+            },
+            media="json",
+        )
 
     def h_transfer_speedLimitsMode(self, p: Params) -> Response:
         return Response("1" if self.e.settings.get("alt_speed_active") else "0")
@@ -180,23 +210,47 @@ class QbApi:
             return NOT_FOUND
         i = self.e.info(s)
         ti = s.handle.torrent_file() if s.has_metadata else None
-        return Response({
-            "save_path": i["save_path"], "creation_date": ti.creation_date() if ti else -1,
-            "piece_size": ti.piece_length() if ti else -1, "comment": ti.comment() if ti else "",
-            "total_wasted": s.total_failed_bytes + s.total_redundant_bytes,
-            "total_uploaded": i["uploaded"], "total_uploaded_session": i["uploaded_session"],
-            "total_downloaded": i["downloaded"], "total_downloaded_session": i["downloaded_session"],
-            "up_limit": i["up_limit"], "dl_limit": i["dl_limit"], "time_elapsed": i["time_active"],
-            "seeding_time": i["seeding_time"], "nb_connections": s.num_connections,
-            "nb_connections_limit": 100, "share_ratio": i["ratio"], "addition_date": i["added_on"],
-            "completion_date": i["completion_on"], "created_by": ti.creator() if ti else "",
-            "dl_speed_avg": 0, "dl_speed": i["dlspeed"], "eta": i["eta"], "last_seen": i["last_activity"],
-            "peers": s.num_peers - s.num_seeds, "peers_total": s.list_peers - s.list_seeds,
-            "pieces_have": s.num_pieces, "pieces_num": ti.num_pieces() if ti else 0,
-            "reannounce": 0, "seeds": s.num_seeds, "seeds_total": s.list_seeds,
-            "total_size": i["total_size"], "up_speed": i["upspeed"], "up_speed_avg": 0,
-            "isPrivate": bool(ti.priv()) if ti else False, "hash": h, "name": i["name"],
-        }, media="json")
+        return Response(
+            {
+                "save_path": i["save_path"],
+                "creation_date": ti.creation_date() if ti else -1,
+                "piece_size": ti.piece_length() if ti else -1,
+                "comment": ti.comment() if ti else "",
+                "total_wasted": s.total_failed_bytes + s.total_redundant_bytes,
+                "total_uploaded": i["uploaded"],
+                "total_uploaded_session": i["uploaded_session"],
+                "total_downloaded": i["downloaded"],
+                "total_downloaded_session": i["downloaded_session"],
+                "up_limit": i["up_limit"],
+                "dl_limit": i["dl_limit"],
+                "time_elapsed": i["time_active"],
+                "seeding_time": i["seeding_time"],
+                "nb_connections": s.num_connections,
+                "nb_connections_limit": 100,
+                "share_ratio": i["ratio"],
+                "addition_date": i["added_on"],
+                "completion_date": i["completion_on"],
+                "created_by": ti.creator() if ti else "",
+                "dl_speed_avg": 0,
+                "dl_speed": i["dlspeed"],
+                "eta": i["eta"],
+                "last_seen": i["last_activity"],
+                "peers": s.num_peers - s.num_seeds,
+                "peers_total": s.list_peers - s.list_seeds,
+                "pieces_have": s.num_pieces,
+                "pieces_num": ti.num_pieces() if ti else 0,
+                "reannounce": 0,
+                "seeds": s.num_seeds,
+                "seeds_total": s.list_seeds,
+                "total_size": i["total_size"],
+                "up_speed": i["upspeed"],
+                "up_speed_avg": 0,
+                "isPrivate": bool(ti.priv()) if ti else False,
+                "hash": h,
+                "name": i["name"],
+            },
+            media="json",
+        )
 
     def h_torrents_files(self, p: Params) -> Response:
         r = self.e.files(p.s("hash").lower())
@@ -208,8 +262,7 @@ class QbApi:
 
     def h_torrents_categories(self, p: Params) -> Response:
         cats = self.e.state.get("categories", {})
-        return Response({n: {"name": n, "savePath": c.get("savePath", "")} for n, c in cats.items()},
-                        media="json")
+        return Response({n: {"name": n, "savePath": c.get("savePath", "")} for n, c in cats.items()}, media="json")
 
     def h_torrents_tags(self, p: Params) -> Response:
         return Response(sorted(self.e.state.get("tags", [])), media="json")
@@ -218,11 +271,17 @@ class QbApi:
     def h_torrents_add(self, p: Params) -> Response:
         tags = [t.strip() for t in p.s("tags").split(",") if t.strip()]
         common = dict(
-            save_path=p.s("savepath") or None, category=p.s("category"), tags=tags,
-            paused=p.b("paused") or p.b("stopped"), sequential=p.b("sequentialDownload"),
-            first_last=p.b("firstLastPiecePrio"), up_limit=p.i("upLimit", -1),
-            dl_limit=p.i("dlLimit", -1), ratio_limit=p.f("ratioLimit", -2),
-            seeding_time_limit=p.i("seedingTimeLimit", -2))
+            save_path=p.s("savepath") or None,
+            category=p.s("category"),
+            tags=tags,
+            paused=p.b("paused") or p.b("stopped"),
+            sequential=p.b("sequentialDownload"),
+            first_last=p.b("firstLastPiecePrio"),
+            up_limit=p.i("upLimit", -1),
+            dl_limit=p.i("dlLimit", -1),
+            ratio_limit=p.f("ratioLimit", -2),
+            seeding_time_limit=p.i("seedingTimeLimit", -2),
+        )
         if common["category"] and common["category"] not in self.e.state.get("categories", {}):
             with self.e.state.lock:
                 self.e.state.data["categories"][common["category"]] = {"savePath": ""}
@@ -234,8 +293,7 @@ class QbApi:
                     self.e.add(magnet=url, **common)
                 elif re.match(r"^https?://", url, re.I):
                     kind, payload = fetch_torrent(url)
-                    self.e.add(**({"magnet": payload} if kind == "magnet" else {"data": payload}),
-                               **common)
+                    self.e.add(**({"magnet": payload} if kind == "magnet" else {"data": payload}), **common)
                 else:
                     continue
                 added += 1
@@ -310,6 +368,7 @@ class QbApi:
 
     def _toggle_flag(self, h: str, name: str) -> None:
         import libtorrent as lt
+
         handle = self.e.handle(h)
         if handle:
             flag = getattr(lt.torrent_flags, name)
@@ -338,6 +397,7 @@ class QbApi:
             m["ratio_limit"] = p.f("ratioLimit", -2)
             m["seeding_time_limit"] = p.i("seedingTimeLimit", -2)
             m["inactive_seeding_time_limit"] = p.i("inactiveSeedingTimeLimit", -2)
+
         r = self._each(p, apply)
         self.e.state.save()
         return r
@@ -444,8 +504,9 @@ class QbApi:
     def _snapshot(self) -> dict[str, Any]:
         return {
             "torrents": {i["hash"]: i for i in self.e.list_info()},
-            "categories": {n: {"name": n, "savePath": c.get("savePath", "")}
-                           for n, c in self.e.state.get("categories", {}).items()},
+            "categories": {
+                n: {"name": n, "savePath": c.get("savePath", "")} for n, c in self.e.state.get("categories", {}).items()
+            },
             "tags": sorted(self.e.state.get("tags", [])),
             "server_state": self.e.server_state(),
         }
@@ -491,8 +552,9 @@ class QbApi:
         return Response(out, media="json")
 
     def h_sync_torrentPeers(self, p: Params) -> Response:
-        return Response({"rid": p.i("rid") + 1, "full_update": True, "peers": self.e.peers(
-            p.s("hash").lower())}, media="json")
+        return Response(
+            {"rid": p.i("rid") + 1, "full_update": True, "peers": self.e.peers(p.s("hash").lower())}, media="json"
+        )
 
     # ---- log --------------------------------------------------------------------------------
     def h_log_main(self, p: Params) -> Response:

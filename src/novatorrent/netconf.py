@@ -49,7 +49,8 @@ def build_settings_pack(s: dict[str, Any], partial: bool = False) -> dict[str, A
     enc = int(s.get("encryption", 0))
     pol = {0: 1, 1: 0, 2: 2}.get(enc, 1)  # prefer -> enabled, require -> forced, disable -> disabled
     ptype = {"None": PROXY_NONE, "SOCKS5": PROXY_SOCKS5, "HTTP": PROXY_HTTP}.get(
-        str(s.get("proxy_type", "None")), PROXY_NONE)
+        str(s.get("proxy_type", "None")), PROXY_NONE
+    )
     if ptype in (PROXY_SOCKS5, PROXY_HTTP) and s.get("proxy_username"):
         ptype += 1
     iface = (s.get("current_network_interface") or "").strip()
@@ -58,10 +59,13 @@ def build_settings_pack(s: dict[str, Any], partial: bool = False) -> dict[str, A
         "user_agent": USER_AGENT,
         "listen_interfaces": listen_interfaces(s),
         "outgoing_interfaces": addr or iface,
-        "alert_mask": (lt.alert.category_t.error_notification | lt.alert.category_t.status_notification
-                       | lt.alert.category_t.storage_notification
-                       | lt.alert.category_t.port_mapping_notification
-                       | lt.alert.category_t.ip_block_notification),
+        "alert_mask": (
+            lt.alert.category_t.error_notification
+            | lt.alert.category_t.status_notification
+            | lt.alert.category_t.storage_notification
+            | lt.alert.category_t.port_mapping_notification
+            | lt.alert.category_t.ip_block_notification
+        ),
         "enable_dht": bool(s.get("dht")),
         "enable_lsd": bool(s.get("lsd")),
         "enable_upnp": bool(s.get("upnp")),
