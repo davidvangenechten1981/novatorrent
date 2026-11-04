@@ -30,3 +30,4 @@ _sorteer-logs/
 
 .devconfig/
 *.ntbak
+*.egg-info/
