@@ -8,7 +8,9 @@ from typing import Any
 
 import httpx
 
+from . import netguard
 from .engine import Engine, thash
+from .notify import mask_notify, merge_notify, notify_config
 from .settings import DEFAULTS
 
 WEBAPI_VERSION = "2.9.3"
@@ -110,6 +112,7 @@ class QbApi:
     def h_app_preferences(self, p: Params) -> Response:
         d = self.e.settings.snapshot()
         d.pop("proxy_password", None)
+        d["nova_notify"] = mask_notify(notify_config(d))
         d["max_ratio"] = d["max_ratio"] if d["max_ratio_enabled"] else -1
         d["max_seeding_time"] = d["max_seeding_time"] if d["max_seeding_time_enabled"] else -1
         d["create_subfolder_enabled"] = True
@@ -133,8 +136,11 @@ class QbApi:
                     values[k] = int(v)
                 else:
                     del values[k]
+        if isinstance(values.get("nova_notify"), dict):
+            values["nova_notify"] = merge_notify(self.e.settings.get("nova_notify") or {}, values["nova_notify"])
         self.e.settings.update(values)
         self.e.apply_settings()
+        self.e.apply_ip_filter()
         return OK
 
     # ---- transfer -------------------------------------------------------------------------
@@ -179,6 +185,14 @@ class QbApi:
     def h_transfer_setUploadLimit(self, p: Params) -> Response:
         self.e.settings.update({"up_limit": max(p.i("limit") // 1024, 0)})
         self.e.apply_settings()
+        return OK
+
+    def h_transfer_banPeers(self, p: Params) -> Response:
+        for peer in p.s("peers").split("|"):
+            try:
+                self.e.ban_peer(peer.rsplit(":", 1)[0].strip("[]"))
+            except ValueError:
+                continue
         return OK
 
     # ---- torrents: queries ------------------------------------------------------------------
@@ -566,6 +580,7 @@ def fetch_torrent(url: str) -> tuple[str, Any]:
     """Download a .torrent from http(s). Prowlarr may redirect to a magnet link."""
     with httpx.Client(follow_redirects=False, timeout=30) as c:
         for _ in range(5):
+            netguard.check_url(url)
             r = c.get(url, headers={"User-Agent": "NovaTorrent"})
             if r.is_redirect:
                 loc = r.headers.get("location", "")

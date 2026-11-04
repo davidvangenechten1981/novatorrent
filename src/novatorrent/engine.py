@@ -66,6 +66,8 @@ class Engine:
         self.ses = lt.session(build_settings_pack(cfg), 0)  # 0: no default plugins (PEX is opt-in)
         session_extensions(self.ses, cfg)
         self.apply_ip_filter()
+        for ip in self.state.get("banned", []):
+            self.ban_peer(ip, persist=False)
         self._load_resume()
         self._thread = threading.Thread(target=self._alert_loop, name="alerts", daemon=True)
         self._thread.start()
@@ -524,7 +526,8 @@ class Engine:
             "time_active": secs(s.active_duration),
             "added_on": m.get("added_on", 0),
             "completion_on": m.get("completion_on", 0) or -1,
-            "last_activity": int(time.time()) - max(secs(s.time_since_upload), 0),
+            "last_activity": int(time.time())
+            - (secs(s.time_since_upload) if s.time_since_upload >= 0 else secs(s.seeding_duration)),
             "seen_complete": m.get("seen_complete", 0),
             "amount_left": left,
             "completed": s.total_wanted_done,
@@ -683,6 +686,20 @@ class Engine:
                 "files": "",
             }
         return out
+
+    def ban_peer(self, ip: str, persist: bool = True) -> None:
+        import ipaddress
+
+        ip = str(ipaddress.ip_address(ip))  # validates
+        flt = self.ses.get_ip_filter()
+        flt.add_rule(ip, ip, 1)
+        self.ses.set_ip_filter(flt)
+        if persist:
+            with self.state.lock:
+                banned = self.state.data.setdefault("banned", [])
+                if ip not in banned:
+                    banned.append(ip)
+            self.state.save()
 
     def add_trackers(self, h: str, urls: list[str]) -> None:
         handle = self.handle(h)

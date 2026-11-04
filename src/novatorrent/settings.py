@@ -158,6 +158,8 @@ STATE_DEFAULTS: dict[str, Any] = {
     "categories": {},  # name -> {"savePath": str}
     "tags": [],
     "torrents": {},  # hash -> metadata
+    "rss": {"feeds": {}, "rules": {}, "seen": {}, "episodes": []},
+    "banned": [],  # banned peer IPs
 }
 
 

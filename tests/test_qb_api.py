@@ -131,12 +131,14 @@ def test_readonly_user_and_apikey(client):
     auth = client.app.state.auth
     auth.set_user("viewer", "viewer-pass-1", "readonly")
     key = auth.create_api_key("homepage", "readonly")
-    with TestClient(client.app) as c2:
+    c2 = TestClient(client.app)
+    if True:
         login = c2.post("/api/v2/auth/login", data={"username": "viewer", "password": "viewer-pass-1"})
         assert login.text == "Ok."
         assert c2.get("/api/v2/torrents/info").status_code == 200
         assert c2.post("/api/v2/torrents/pause", data={"hashes": "all"}).status_code == 403
-    with TestClient(client.app) as c3:
+    c3 = TestClient(client.app)
+    if True:
         ok = c3.get("/api/v2/torrents/info", headers={"Authorization": f"Bearer {key}"})
         assert ok.status_code == 200
         bad = c3.get("/api/v2/torrents/info", headers={"Authorization": "Bearer nt_bad"})

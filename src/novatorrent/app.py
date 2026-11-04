@@ -1,21 +1,32 @@
-"""FastAPI application: qBittorrent-compatible API, health endpoint, static web-UI."""
+"""FastAPI application: qBittorrent-compatible API, Nova API, health endpoint, static web-UI."""
 
 from __future__ import annotations
 
+import hmac
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile
 
 from .auth import AuthStore
 from .engine import Engine
+from .manager import Manager
 from .netmon import NetMonitor
+from .notify import Notifier
+from .novaapi import build_router
 from .qbapi import READONLY_OK, Params, QbApi
+from .rss import RssManager
+from .security import SecurityMiddleware
 from .settings import Settings, State
+
+WEB_DIR = Path(__file__).parent / "web"
 
 
 def create_app(config_dir: Path | None = None) -> FastAPI:
@@ -28,17 +39,46 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     engine = Engine(config_dir, settings, state)
     qb = QbApi(engine)
     netmon = NetMonitor(engine)
+    manager = Manager(engine)
+    notifier = Notifier(engine)
+    rss = RssManager(engine)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await run_in_threadpool(engine.start)
         await run_in_threadpool(netmon.start)
+        manager.start()
+        notifier.start()
+        rss.start()
         yield
-        netmon.stop()
+        for svc in (rss, notifier, manager, netmon):
+            svc.stop()
         await run_in_threadpool(engine.stop)
 
     app = FastAPI(title="NovaTorrent", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(SecurityMiddleware)
     app.state.engine, app.state.auth, app.state.settings, app.state.qb = engine, auth, settings, qb
+    app.state.manager, app.state.notifier, app.state.rss = manager, notifier, rss
+
+    def principal(request: Request) -> tuple[str, str] | None:
+        hdr = request.headers.get("authorization", "")
+        if hdr.lower().startswith("bearer "):
+            role = auth.check_api_key(hdr[7:].strip())
+            return ("apikey", role) if role else None
+        sess = auth.get_session(request.cookies.get("SID"))
+        return (sess[0], sess[1]) if sess else None
+
+    def csrf_ok(request: Request) -> bool:
+        """State-changing /api/nova calls need the per-session token; API keys are exempt
+        because they are not sent automatically by a browser."""
+        if request.headers.get("authorization", "").lower().startswith("bearer "):
+            return True
+        sess = auth.get_session(request.cookies.get("SID"))
+        token = request.headers.get("x-csrf-token", "")
+        return bool(sess) and hmac.compare_digest(sess[2], token)
+
+    ctx = SimpleNamespace(engine=engine, auth=auth, rss=rss, notifier=notifier, principal=principal, csrf_ok=csrf_ok)
+    app.include_router(build_router(ctx))
 
     @app.get("/api/health")
     def health() -> Response:
@@ -48,6 +88,35 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if not engine.vpn_ok:
             return JSONResponse({"status": "vpn_down"}, status_code=503)
         return JSONResponse({"status": "ok"})
+
+    @app.get("/metrics")
+    def metrics(request: Request) -> Response:
+        """Prometheus metrics; opt-in via NOVA_METRICS=1 and needs a valid session/API key."""
+        if os.environ.get("NOVA_METRICS") != "1":
+            return PlainTextResponse("Not Found", 404)
+        if not principal(request):
+            return PlainTextResponse("Forbidden", 403)
+        st = engine.server_state()
+        infos = engine.list_info()
+        lines = [
+            "# TYPE novatorrent_download_bytes_per_second gauge",
+            f"novatorrent_download_bytes_per_second {st['dl_info_speed']}",
+            "# TYPE novatorrent_upload_bytes_per_second gauge",
+            f"novatorrent_upload_bytes_per_second {st['up_info_speed']}",
+            "# TYPE novatorrent_torrents gauge",
+            f"novatorrent_torrents {len(infos)}",
+            "# TYPE novatorrent_peers gauge",
+            f"novatorrent_peers {st['total_peer_connections']}",
+            "# TYPE novatorrent_free_space_bytes gauge",
+            f"novatorrent_free_space_bytes {st['free_space_on_disk']}",
+            "# TYPE novatorrent_alltime_downloaded_bytes counter",
+            f"novatorrent_alltime_downloaded_bytes {st['alltime_dl']}",
+            "# TYPE novatorrent_alltime_uploaded_bytes counter",
+            f"novatorrent_alltime_uploaded_bytes {st['alltime_ul']}",
+            "# TYPE novatorrent_vpn_up gauge",
+            f"novatorrent_vpn_up {1 if engine.vpn_ok else 0}",
+        ]
+        return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
 
     async def read_params(request: Request) -> Params:
         data: dict[str, str] = dict(request.query_params)
@@ -61,18 +130,20 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
                     data[k] = v
         return Params(data, files)
 
-    def principal(request: Request) -> tuple[str, str] | None:
-        hdr = request.headers.get("authorization", "")
-        if hdr.lower().startswith("bearer "):
-            role = auth.check_api_key(hdr[7:].strip())
-            return ("apikey", role) if role else None
-        sess = auth.get_session(request.cookies.get("SID"))
-        return (sess[0], sess[1]) if sess else None
+    def origin_mismatch(request: Request) -> bool:
+        """qBittorrent-style CSRF check for cookie-authenticated POSTs: if the browser sends
+        Origin/Referer, its host must equal the Host header. Non-browser clients send neither."""
+        if request.method != "POST" or request.headers.get("authorization"):
+            return False
+        src = request.headers.get("origin") or request.headers.get("referer")
+        return bool(src) and urlparse(src).netloc != request.headers.get("host", "")
 
     @app.api_route("/api/v2/{section}/{name}", methods=["GET", "POST"])
     async def qb_dispatch(section: str, name: str, request: Request) -> Response:
         route = f"{section}/{name}"
         ip = request.client.host if request.client else "?"
+        if origin_mismatch(request):
+            return PlainTextResponse("Unauthorized", 401)
         params = await read_params(request)
         if route == "auth/login":
             wait = auth.locked_for(ip)
@@ -103,5 +174,8 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if r.media == "json":
             return JSONResponse(r.body, status_code=r.status)
         return PlainTextResponse(str(r.body), status_code=r.status)
+
+    if WEB_DIR.exists():
+        app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     return app
