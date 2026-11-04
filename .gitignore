@@ -27,3 +27,6 @@ _to_delete/
 duplicaten-rapport.csv
 *-rapport.csv
 _sorteer-logs/
+
+.devconfig/
+*.ntbak

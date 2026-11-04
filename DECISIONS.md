@@ -37,3 +37,21 @@ If `NOVA_ADMIN_PASSWORD` is not set, a random password is generated on first sta
 
 ## D7 — webapiVersion 2.9.3 (qBittorrent 4.6.x) -> states `pausedDL/pausedUP`
 Radarr/Sonarr/Lidarr/Cleanuparr understand both old and new names; 4.6 is the widest baseline.
+
+## D8 — PUID/PGID via compose `user:` instead of a root entrypoint
+With `cap_drop: ALL` a root entrypoint cannot drop privileges (no CAP_SETUID/SETGID). So the image runs
+as 1026:100 by default and compose sets `user: PUID:PGID`. User must make /config and /data writable for it.
+
+## D9 — Extra build/runtime items
+`setuptools` is used as build backend (build-time only, to ship the web files in the wheel); `tzdata` is
+installed in the image for TZ=Europe/Brussels. No other additions.
+
+## D10 — Security defaults
+LAN-only (private/loopback/link-local/CGNAT) unless NOVA_ALLOW_WAN=1; per-IP token bucket; CSRF: per-session
+token for /api/nova writes and qBittorrent-style Origin/Referer check for cookie-auth POSTs; API keys exempt
+(not auto-sent by browsers); /metrics opt-in (NOVA_METRICS=1) and authenticated; backup excludes auth.json.
+
+## D11 — Known gaps chosen on purpose
+No GeoIP (peer country empty: needs a database file, license); qBittorrent's own /rss/* API not implemented
+(Nova has /api/nova/rss); Telegram untested (fixed host); session-wide pause is the kill switch (plus interface binding).
+`.env.example` was not created: writing `.env.*` is blocked by the user's permission rules; variables are in README.

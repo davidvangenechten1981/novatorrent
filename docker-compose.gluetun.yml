@@ -1,0 +1,64 @@
+# NovaTorrent behind Gluetun (all traffic through the VPN tunnel).
+# The WebUI port and the BitTorrent port are published on the *gluetun* service, because
+# NovaTorrent shares gluetun's network stack. Fill in your provider settings in the variables.
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TZ: ${TZ:-Europe/Brussels}
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
+      OPENVPN_USER: ${OPENVPN_USER:-}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
+      # Let the LAN reach the WebUI and let NovaTorrent reach Prowlarr/Radarr on the LAN:
+      FIREWALL_OUTBOUND_SUBNETS: ${LAN_SUBNET:-192.168.0.0/24}
+      # Port forwarding (provider must support it, e.g. ProtonVPN/PIA):
+      VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
+      VPN_PORT_FORWARDING_STATUS_FILE: /gluetun/forwarded_port
+    volumes:
+      - gluetun-data:/gluetun
+    ports:
+      - "${WEBUI_PORT:-8080}:8080"
+      - "${BT_PORT:-6881}:6881/tcp"
+      - "${BT_PORT:-6881}:6881/udp"
+
+  novatorrent:
+    image: ${NOVA_IMAGE:-ghcr.io/OWNER/novatorrent:latest}
+    container_name: novatorrent
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    user: "${PUID:-1026}:${PGID:-100}"
+    environment:
+      TZ: ${TZ:-Europe/Brussels}
+      NOVA_ADMIN_PASSWORD: ${NOVA_ADMIN_PASSWORD:-}
+      NOVA_ALLOWED_HOSTS: ${NOVA_ALLOWED_HOSTS:-}
+      NOVA_METRICS: ${NOVA_METRICS:-0}
+      # Kill switch: bind to the tunnel and refuse to run without it.
+      NOVA_BIND_INTERFACE: tun0
+      NOVA_REQUIRE_VPN: "1"
+      NOVA_PORT_FILE: /gluetun/forwarded_port
+    volumes:
+      - ${CONFIG_PATH:-./config}:/config
+      - ${DATA_PATH:-./data}:/data
+      - gluetun-data:/gluetun:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  gluetun-data:

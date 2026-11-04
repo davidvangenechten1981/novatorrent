@@ -1,0 +1,10 @@
+.git
+.venv
+.pytest_tmp
+.ruff_cache
+_to_delete
+tests
+.claude
+.env
+.env.*
+**/__pycache__

@@ -7,8 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 
 from . import __version__
+from .backup import BackupError, export_config, import_config
 
 
 def build_router(ctx: Any) -> APIRouter:
@@ -197,6 +199,31 @@ def build_router(ctx: Any) -> APIRouter:
         if not auth.delete_api_key(kid):
             raise HTTPException(404, "unknown key")
         return {"ok": True}
+
+    # ---- backup ---------------------------------------------------------------------------
+    @r.post("/backup/export")
+    async def backup_export(request: Request):
+        who(request, write=True)
+        pw = str((await request.json()).get("password", ""))
+        await run_in_threadpool(e.save_all_resume, 10.0)  # fresh resume data first
+        try:
+            blob = await run_in_threadpool(export_config, e.config_dir, pw)
+        except BackupError as ex:
+            raise HTTPException(400, str(ex)) from None
+        return Response(blob, media_type="application/octet-stream")
+
+    @r.post("/backup/import")
+    async def backup_import(request: Request):
+        who(request, write=True)
+        form = await request.form()
+        up = form.get("file")
+        if up is None or not hasattr(up, "read"):
+            raise HTTPException(400, "file missing")
+        try:
+            names = await run_in_threadpool(import_config, e.config_dir, str(form.get("password", "")), await up.read())
+        except BackupError as ex:
+            raise HTTPException(400, str(ex)) from None
+        return {"restored": len(names), "restart_required": True}
 
     _ = ipaddress
     return r

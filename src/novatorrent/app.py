@@ -35,6 +35,16 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     settings, state = Settings(config_dir), State(config_dir)
     if os.environ.get("NOVA_DEFAULT_SAVE_PATH"):
         settings.data["save_path"] = os.environ["NOVA_DEFAULT_SAVE_PATH"]
+    # Deployment overrides (compose): applied on every start so a VPN setup cannot be misconfigured away.
+    env_over = {}
+    if os.environ.get("NOVA_BIND_INTERFACE"):
+        env_over["current_network_interface"] = os.environ["NOVA_BIND_INTERFACE"]
+    if os.environ.get("NOVA_REQUIRE_VPN") == "1":
+        env_over["nova_require_vpn_binding"] = True
+    if os.environ.get("NOVA_PORT_FILE"):
+        env_over["nova_port_file"] = os.environ["NOVA_PORT_FILE"]
+    if env_over:
+        settings.update(env_over)
     auth = AuthStore(config_dir)
     engine = Engine(config_dir, settings, state)
     qb = QbApi(engine)

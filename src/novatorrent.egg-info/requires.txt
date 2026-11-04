@@ -1,0 +1,7 @@
+libtorrent>=2.0.10
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
+httpx>=0.27
+argon2-cffi>=23.1
+cryptography>=43

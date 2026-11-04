@@ -1,0 +1,29 @@
+# NovaTorrent without VPN. For Portainer: Stacks > Add stack > paste this file,
+# fill the variables under "Environment variables" (see .env.example).
+services:
+  novatorrent:
+    image: ${NOVA_IMAGE:-ghcr.io/OWNER/novatorrent:latest}
+    container_name: novatorrent
+    restart: unless-stopped
+    user: "${PUID:-1026}:${PGID:-100}"
+    environment:
+      TZ: ${TZ:-Europe/Brussels}
+      # Optional first-start admin password. If empty a random one is written to /config/initial_password.txt
+      NOVA_ADMIN_PASSWORD: ${NOVA_ADMIN_PASSWORD:-}
+      # Comma-separated host names you use to open the UI (DNS-rebinding protection). Empty = off.
+      NOVA_ALLOWED_HOSTS: ${NOVA_ALLOWED_HOSTS:-}
+      NOVA_METRICS: ${NOVA_METRICS:-0}
+    ports:
+      - "${WEBUI_PORT:-8080}:8080"
+      - "${BT_PORT:-6881}:6881/tcp"
+      - "${BT_PORT:-6881}:6881/udp"
+    volumes:
+      - ${CONFIG_PATH:-./config}:/config
+      - ${DATA_PATH:-./data}:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
