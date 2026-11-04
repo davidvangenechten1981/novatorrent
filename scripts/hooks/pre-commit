@@ -1,0 +1,13 @@
+#!/bin/sh
+# Blokkeert een commit als gitleaks een geheim vindt in de gestagede bestanden.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "WAARSCHUWING: gitleaks is niet geinstalleerd; geheimencontrole overgeslagen."
+  echo "Installeer met: winget install Gitleaks.Gitleaks"
+  exit 0
+fi
+gitleaks protect --staged --redact --no-banner
+status=$?
+if [ $status -ne 0 ]; then
+  echo "Commit geblokkeerd: mogelijk geheim gevonden. Controleer de melding hierboven."
+fi
+exit $status

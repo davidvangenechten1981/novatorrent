@@ -1,0 +1,21 @@
+[project]
+name = "mijn-project"
+version = "0.1.0"
+description = "Korte omschrijving"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "--basetemp=.pytest_tmp -p no:cacheprovider"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

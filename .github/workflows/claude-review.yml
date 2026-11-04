@@ -1,0 +1,32 @@
+name: Claude review
+
+# Alleen op aanvraag: zet het label "claude-review" op een pull request.
+# Instellen: zie docs/GITHUB-REVIEW.md in MijnProject.
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  review:
+    if: github.event.label.name == 'claude-review'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review deze pull request op fouten, veiligheid (geheimen, verwijderen zonder
+            dry-run) en ontbrekende tests. Antwoord in het Nederlands, kort, met
+            opmerkingen bij de betreffende regels.
+          claude_args: |
+            --max-turns 10

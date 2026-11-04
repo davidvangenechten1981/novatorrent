@@ -1,0 +1,29 @@
+.env
+.env.*
+secrets/
+.claude/settings.local.json
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+*.log
+
+# Ruflo runtime en lokale data
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.swarm/
+.claude/settings.local.json
+*.bak-ruflo-*
+
+# Eigen mappen
+_to_delete/
+.pytest_cache/
+.ruff_cache/
+.pytest_tmp/
+
+# Rapporten met paden van eigen bestanden
+duplicaten-rapport.csv
+*-rapport.csv
+_sorteer-logs/
