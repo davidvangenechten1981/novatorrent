@@ -56,6 +56,7 @@ class Engine:
         self._status_cache: tuple[float, dict[str, Any]] = (0.0, {})
         self.on_event = lambda name, info: None  # set by app: notifications/hooks
         self.session_started = time.time()
+        self.vpn_ok, self.vpn_reason = True, ""
 
     # ---- lifecycle -------------------------------------------------------------------------
     def start(self) -> None:
@@ -64,6 +65,7 @@ class Engine:
         cfg = self.settings.snapshot()
         self.ses = lt.session(build_settings_pack(cfg), 0)  # 0: no default plugins (PEX is opt-in)
         session_extensions(self.ses, cfg)
+        self.apply_ip_filter()
         self._load_resume()
         self._thread = threading.Thread(target=self._alert_loop, name="alerts", daemon=True)
         self._thread.start()
@@ -84,6 +86,45 @@ class Engine:
 
         if self.ses:
             self.ses.apply_settings(build_settings_pack(self.settings.snapshot(), partial=True))
+
+    def apply_ip_filter(self) -> None:
+        from .ipfilter import load_ip_filter
+
+        if not self.ses:
+            return
+        from libtorrent import ip_filter
+
+        path = self.settings.get("ip_filter_path")
+        if self.settings.get("ip_filter_enabled") and path and Path(path).exists():
+            try:
+                flt, n = load_ip_filter(path)
+                self.ses.set_ip_filter(flt)
+                self.add_log(f"IP filter loaded: {n} ranges", 2)
+                return
+            except Exception as ex:
+                self.add_log(f"IP filter load failed: {type(ex).__name__}", 4)
+        self.ses.set_ip_filter(ip_filter())
+
+    def set_vpn_state(self, ok: bool, reason: str) -> None:
+        """Kill switch: pause all network activity when the required binding disappears."""
+        was_ok = self.vpn_ok
+        self.vpn_ok, self.vpn_reason = ok, reason
+        if not self.ses:
+            return
+        if not ok:
+            self.ses.pause()
+            if was_ok:
+                self.add_log(f"VPN/binding lost, session paused: {reason}", 8)
+                self.on_event("vpn_down", {"reason": reason})
+        elif not was_ok:
+            self.apply_settings()
+            try:
+                self.ses.reopen_network_sockets(0)
+            except Exception:
+                pass
+            self.ses.resume()
+            self.add_log("VPN/binding restored, session resumed", 2)
+            self.on_event("vpn_up", {})
 
     # ---- logging ---------------------------------------------------------------------------
     def add_log(self, message: str, level: int = 1) -> None:
@@ -692,6 +733,8 @@ class Engine:
             "alltime_ul": ul_all,
             "queueing": self.settings.get("queueing_enabled"),
             "use_alt_speed_limits": bool(self.settings.get("alt_speed_active")),
+            "vpn_ok": self.vpn_ok,
+            "vpn_reason": self.vpn_reason,
             "refresh_interval": 1500,
             "total_peer_connections": st.num_peers,
             "use_subcategories": False,

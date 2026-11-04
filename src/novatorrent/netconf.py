@@ -21,6 +21,8 @@ def listen_interfaces(s: dict[str, Any]) -> str:
     port = 0 if s.get("random_port") else int(s.get("listen_port", 6881))
     iface = (s.get("current_network_interface") or "").strip()
     addr = (s.get("current_interface_address") or "").strip()
+    if s.get("nova_require_vpn_binding") and not (iface or addr):
+        return "127.0.0.1:0"  # fail closed: never listen on all interfaces without a binding
     v4, v6 = bool(s.get("nova_ipv4", True)), bool(s.get("nova_ipv6", True))
     if addr:
         try:

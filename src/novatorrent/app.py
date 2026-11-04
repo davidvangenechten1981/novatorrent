@@ -13,6 +13,7 @@ from starlette.datastructures import UploadFile
 
 from .auth import AuthStore
 from .engine import Engine
+from .netmon import NetMonitor
 from .qbapi import READONLY_OK, Params, QbApi
 from .settings import Settings, State
 
@@ -26,11 +27,14 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     auth = AuthStore(config_dir)
     engine = Engine(config_dir, settings, state)
     qb = QbApi(engine)
+    netmon = NetMonitor(engine)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await run_in_threadpool(engine.start)
+        await run_in_threadpool(netmon.start)
         yield
+        netmon.stop()
         await run_in_threadpool(engine.stop)
 
     app = FastAPI(title="NovaTorrent", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -38,8 +42,12 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> Response:
-        ok = engine.ses is not None
-        return JSONResponse({"status": "ok" if ok else "starting"}, status_code=200 if ok else 503)
+        # Intentionally unauthenticated and free of details: used by Docker/Uptime Kuma.
+        if engine.ses is None:
+            return JSONResponse({"status": "starting"}, status_code=503)
+        if not engine.vpn_ok:
+            return JSONResponse({"status": "vpn_down"}, status_code=503)
+        return JSONResponse({"status": "ok"})
 
     async def read_params(request: Request) -> Params:
         data: dict[str, str] = dict(request.query_params)
