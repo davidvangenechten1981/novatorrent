@@ -482,7 +482,7 @@ class Engine:
         base = s.save_path
         if ti is None:
             return base
-        files = ti.files()
+        files = ti.layout()
         if files.num_files() == 1:
             return os.path.join(base, files.file_path(0))
         return os.path.join(base, files.name() if hasattr(files, "name") else s.name)
@@ -596,7 +596,7 @@ class Engine:
         if not st.has_metadata:
             return []
         ti = handle.torrent_file()
-        fs = ti.files()
+        fs = ti.layout()
         prog = handle.file_progress()
         prios = handle.get_file_priorities()
         out = []
@@ -725,7 +725,7 @@ class Engine:
             handle.replace_trackers(ts)
 
     def server_state(self) -> dict[str, Any]:
-        st = self.ses.status()
+        st = self.ses.status()  # deprecated in libtorrent 2.1 (session_stats alerts are the replacement); still works
         sts = self.statuses()
         dl_all = sum(s.all_time_download for s in sts.values())
         ul_all = sum(s.all_time_upload for s in sts.values())

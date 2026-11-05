@@ -162,7 +162,7 @@ class Manager:
             if not handle or not handle.status().has_metadata:
                 continue
             ti = handle.torrent_file()
-            fs = ti.files()
+            fs = ti.layout()
             for f in range(fs.num_files()):
                 size = fs.file_size(f)
                 if size == 0:
