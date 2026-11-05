@@ -31,3 +31,6 @@ _sorteer-logs/
 .devconfig/
 *.ntbak
 *.egg-info/
+
+# local docker smoke-test data
+_test/
