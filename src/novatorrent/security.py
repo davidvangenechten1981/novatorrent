@@ -49,8 +49,16 @@ class TokenBucket:
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, rate: float = 30.0, burst: int = 200):
+    def __init__(self, app, rate: float | None = None, burst: int | None = None):
         super().__init__(app)
+        if rate is None:
+            try:
+                rate = float(os.environ.get("NOVA_RATE_LIMIT", "30"))
+            except ValueError:
+                rate = 30.0
+            rate = max(rate, 1.0)
+        if burst is None:
+            burst = max(200, int(rate * 6))
         self.bucket = TokenBucket(rate, burst)
 
     async def dispatch(self, request: Request, call_next) -> Response:
