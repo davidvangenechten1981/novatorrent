@@ -312,6 +312,12 @@ class Engine:
             extra = [t.strip() for t in self.settings.get("nova_extra_trackers").split() if t.strip()]
             params.trackers = list(params.trackers) + [t for t in extra if t not in params.trackers]
         self.ses.add_torrent(params)
+        # Persist right away: a magnet without metadata is otherwise only saved on shutdown/60s
+        # (and not at all while it has no metadata), so a crash or restart would lose it.
+        try:
+            atomic_write(self.resume_dir / f"{h}.fastresume", lt.write_resume_data_buf(params))
+        except Exception as e:
+            self.add_log(f"Could not write initial resume data for {h}: {e}", 4)
         self.invalidate()
         m = self.meta(h)
         m.update(
