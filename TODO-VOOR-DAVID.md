@@ -18,7 +18,7 @@ Dingen die ik niet zelf uitvoer of niet kon testen.
    Test ook de veilige opties: voeg `--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true --user 1026:100` toe.
 5. Multi-arch: `docker buildx build --platform linux/amd64,linux/arm64 -t novatorrent:test .` (controleert o.a. dat het libtorrent-wiel voor arm64 bestaat).
 6. GitHub (pas na jouw akkoord pushen): `git push -u origin build/novatorrent`, daarna een tag `v0.1.0` voor de image-workflow.
-   Vervang `OWNER` in compose-bestanden en README door je GitHub-naam. Zet Dependabot aan in de repo-instellingen.
+   Zet Dependabot aan in de repo-instellingen.
 7. Radarr/Sonarr koppelen en een echte download testen: zie README, stap-voor-stap.
 8. Kies een sterk wachtwoord, verwijder `initial_password.txt`, maak een aparte gebruiker voor de arr-apps.
 9. Gebruik een openbare testtorrent (bijv. een Linux-ISO) voor de eerste echte download.

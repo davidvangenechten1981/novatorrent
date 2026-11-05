@@ -31,7 +31,7 @@ services:
       - "${BT_PORT:-6881}:6881/udp"
 
   novatorrent:
-    image: ${NOVA_IMAGE:-ghcr.io/OWNER/novatorrent:latest}
+    image: ${NOVA_IMAGE:-ghcr.io/davidvangenechten1981/novatorrent:latest}
     container_name: novatorrent
     restart: unless-stopped
     network_mode: "service:gluetun"

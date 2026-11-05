@@ -24,7 +24,7 @@ Branch `build/novatorrent` (niet gepusht). 59 tests groen, `ruff` schoon.
 
 ## Bij thuiskomst (exacte stappen: `TODO-VOOR-DAVID.md`)
 1. Docker Desktop starten, image bouwen en starten (TODO 4), healthcheck controleren.
-2. `OWNER` vervangen, `git push` na jouw akkoord, tag `v0.1.0`.
+2. (OWNER is al vervangen) `git push` na jouw akkoord, tag `v0.1.0`.
 3. Stack in Portainer (README), eerste login, wachtwoord wijzigen.
 4. Radarr/Sonarr koppelen (README), testdownload met een Linux-ISO.
 5. Gluetun-variant en VPN-test (TODO 2 en 3).

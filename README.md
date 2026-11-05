@@ -23,7 +23,7 @@ qBittorrent-WebUI-v2-compatibele API, zodat Radarr, Sonarr, Lidarr, Prowlarr-flo
 | `BT_PORT` | 6881 | BitTorrent-poort (TCP+UDP) |
 | `CONFIG_PATH` | ./config | map voor instellingen, resume-data (`/config`) |
 | `DATA_PATH` | ./data | downloadmap (`/data`); zet Radarr/Sonarr op **hetzelfde volume** voor hardlinks |
-| `NOVA_IMAGE` | ghcr.io/OWNER/novatorrent:latest | vervang `OWNER` door je GitHub-naam |
+| `NOVA_IMAGE` | ghcr.io/davidvangenechten1981/novatorrent:latest | image dat de GitHub-workflow publiceert |
 | `NOVA_ADMIN_PASSWORD` | leeg | eerste wachtwoord; leeg = willekeurig, in `CONFIG_PATH/initial_password.txt` |
 | `NOVA_ALLOWED_HOSTS` | leeg | hostnamen waarmee je de UI opent (bescherming tegen DNS-rebinding) |
 | `NOVA_METRICS` | 0 | `1` zet `/metrics` (Prometheus) aan; vereist inloggen of API-sleutel |

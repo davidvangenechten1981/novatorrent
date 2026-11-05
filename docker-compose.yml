@@ -2,7 +2,7 @@
 # fill the variables under "Environment variables" (see .env.example).
 services:
   novatorrent:
-    image: ${NOVA_IMAGE:-ghcr.io/OWNER/novatorrent:latest}
+    image: ${NOVA_IMAGE:-ghcr.io/davidvangenechten1981/novatorrent:latest}
     container_name: novatorrent
     restart: unless-stopped
     user: "${PUID:-1026}:${PGID:-100}"
