@@ -34,3 +34,6 @@ _sorteer-logs/
 
 # local docker smoke-test data
 _test/
+
+# the empty template is safe to track
+!.env.example
