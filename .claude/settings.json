@@ -27,7 +27,10 @@
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Read(./.env.prod)",
+      "Read(./.env.development)",
       "Read(./secrets/**)",
       "Bash(rm:*)",
       "Bash(rmdir:*)",

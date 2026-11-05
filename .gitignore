@@ -37,3 +37,6 @@ _test/
 
 # the empty template is safe to track
 !.env.example
+
+# playwright MCP output
+.playwright-mcp/
