@@ -17,6 +17,9 @@ CSP = (
 )
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
+
+
 def is_lan(ip: str) -> bool:
     try:
         a = ipaddress.ip_address(ip.split("%")[0])
@@ -70,7 +73,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if hosts:
             host = request.headers.get("host", "").lower()
             host = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
-            if host not in hosts:
+            # Loopback is always allowed: the container healthcheck calls 127.0.0.1.
+            if host not in hosts and host not in LOOPBACK_HOSTS:
                 return PlainTextResponse("Invalid host header", 400)
         if request.url.path != "/api/health" and not self.bucket.allow(ip):
             return PlainTextResponse("Too Many Requests", 429, headers={"Retry-After": "1"})

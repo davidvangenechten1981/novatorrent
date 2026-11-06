@@ -175,3 +175,18 @@ def test_env_overrides_enforce_vpn_binding(cfg, monkeypatch):
         # interface is missing -> fail closed: health is 503 and the session is paused
         assert c.get("/api/health").status_code == 503
         assert c.app.state.engine.ses.is_paused()
+
+
+def test_healthcheck_works_with_allowed_hosts(cfg, monkeypatch):
+    """The in-container healthcheck calls 127.0.0.1; it must not be blocked by NOVA_ALLOWED_HOSTS."""
+    from fastapi.testclient import TestClient
+
+    from novatorrent.app import create_app
+
+    monkeypatch.setenv("NOVA_ALLOWED_HOSTS", "nas.example,192.168.0.10")
+    with TestClient(create_app(cfg)) as c:
+        for host in ("127.0.0.1:8080", "localhost:8080", "[::1]:8080"):
+            assert c.get("/api/health", headers={"host": host}).status_code == 200, host
+        assert c.get("/api/health", headers={"host": "nas.example"}).status_code == 200
+        # unknown hosts stay blocked for everything else
+        assert c.get("/api/v2/app/version", headers={"host": "evil.example"}).status_code == 400
