@@ -146,6 +146,60 @@ def build_router(ctx: Any) -> APIRouter:
         who(request, write=True)
         return {"added": await run_in_threadpool(ctx.rss.run_feed, fid)}
 
+    # ---- search (Torznab indexers) ----------------------------------------------------------
+    @r.get("/search/indexers")
+    def search_indexers(request: Request):
+        who(request, admin=True)
+        return ctx.search.list_indexers()  # never contains API keys
+
+    @r.post("/search/indexers")
+    async def search_add_indexer(request: Request):
+        who(request, write=True)
+        b = await request.json()
+        try:
+            iid = ctx.search.add_indexer(str(b.get("name", "")), str(b.get("url", "")), str(b.get("apikey", "")))
+        except ValueError as ex:
+            raise HTTPException(400, str(ex)) from None
+        return {"id": iid}
+
+    @r.delete("/search/indexers/{iid}")
+    def search_del_indexer(request: Request, iid: str):
+        who(request, write=True)
+        if not ctx.search.remove_indexer(iid):
+            raise HTTPException(404, "unknown indexer")
+        return {"ok": True}
+
+    @r.post("/search/indexers/{iid}/test")
+    async def search_test_indexer(request: Request, iid: str):
+        who(request, write=True)
+        try:
+            return await run_in_threadpool(ctx.search.test, iid)
+        except KeyError:
+            raise HTTPException(404, "unknown indexer") from None
+
+    @r.get("/search")
+    async def search_run(request: Request, q: str = "", indexers: str = "", limit: int = 100):
+        who(request, admin=True)
+        ids = [i for i in indexers.split(",") if i]
+        try:
+            return await run_in_threadpool(ctx.search.search, q, ids, limit)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex)) from None
+
+    @r.post("/search/add")
+    async def search_add(request: Request):
+        who(request, write=True)
+        b = await request.json()
+        try:
+            h = await run_in_threadpool(
+                ctx.search.add_result, str(b.get("rid", "")), str(b.get("category", "")), bool(b.get("paused"))
+            )
+        except KeyError:
+            raise HTTPException(404, "result expired, search again") from None
+        except Exception as ex:
+            raise HTTPException(400, f"add failed: {type(ex).__name__}") from None
+        return {"hash": h}
+
     # ---- notifications ----------------------------------------------------------------------
     @r.post("/notify/test")
     async def notify_test(request: Request):

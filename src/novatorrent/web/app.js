@@ -1,4 +1,5 @@
 import { nova, qb, setCsrf } from "./api.js";
+import { renderSearch } from "./search.js";
 import { renderSettings } from "./settings.js";
 import {
   bytes, closeDialogs, date, dialog, drawGraph, eta, getLang, h, loadI18n, setLang, speed, t, toast,
@@ -99,6 +100,7 @@ function renderTop() {
     btn("☰", () => { S.sideOpen = !S.sideOpen; renderSide(); }, "mobile-only"),
     h("span", { class: "brand" }, t("app.title")),
     btn(t("nav.torrents"), () => showView("torrents")),
+    ...(ro ? [] : [btn(t("nav.search"), () => showView("search"))]),
     ...(ro ? [] : [btn("+ " + t("tb.add"), addDialog, "primary"), btn(t("tb.resume"), () => act("resume")),
       btn(t("tb.pause"), () => act("pause")), btn(t("tb.delete"), delDialog, "danger"),
       btn("⋯", moreMenu, "", t("tb.recheck"))]),
@@ -130,6 +132,9 @@ function showView(v) {
     main.replaceChildren(h("div", { class: "side", id: "side" }),
       h("div", { class: "center" }, h("div", { class: "tablewrap", id: "tablewrap" }), h("div", { class: "detail", id: "detail" })));
     renderSide(); renderTable(); renderDetail();
+  } else if (v === "search") {
+    main.replaceChildren(h("div", { class: "page", style: "grid-column:1/-1" }));
+    renderSearch(main.firstChild, { categories: S.categories });
   } else if (v === "settings") {
     main.replaceChildren(h("div", { class: "page", style: "grid-column:1/-1" }));
     renderSettings(main.firstChild, { role: S.role });

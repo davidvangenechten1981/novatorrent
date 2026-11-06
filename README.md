@@ -62,6 +62,17 @@ Gebruik `docker-compose.gluetun.yml`. NovaTorrent deelt de netwerkstack van Glue
 7. Cleanuparr: kies "qBittorrent" als client met dezelfde gegevens.
 8. Homepage-widget: `type: qbittorrent`, `url`, `username`, `password` (of een view-only gebruiker). Uptime Kuma: HTTP-monitor op `/api/health`.
 
+## Zoeken in je indexers (Torznab)
+
+NovaTorrent kan zoeken in je eigen Torznab-indexers (bijvoorbeeld die van Prowlarr) en een resultaat met één klik toevoegen.
+1. Prowlarr: Indexers > menu van een indexer > **Copy Torznab Feed** voor de URL (`…/<id>/api`). De API-sleutel staat onder
+   Settings > General.
+2. NovaTorrent: Instellingen > **Zoek-indexers (Torznab)** > naam, URL en sleutel invullen > Toevoegen > **Testen**.
+3. Knop **Zoeken** bovenin: zoekterm, kies indexers en categorie, **Toevoegen**.
+
+De API-sleutel en de download-URL's (daar zit vaak een sleutel in) blijven op de server: de browser krijgt alleen een korte
+resultaat-id. Alleen beheerders kunnen zoeken. Interne adressen zoals loopback en link-local worden geblokkeerd; LAN-adressen mogen.
+
 ## Rollen, sleutels en beveiliging
 
 - Rollen: **Beheren** (alles) en **Alleen kijken** (alleen lees-endpoints). API-sleutels hebben dezelfde rollen en worden

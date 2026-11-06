@@ -23,6 +23,7 @@ from .notify import Notifier
 from .novaapi import build_router
 from .qbapi import READONLY_OK, Params, QbApi
 from .rss import RssManager
+from .search import SearchManager
 from .security import SecurityMiddleware
 from .settings import Settings, State
 
@@ -52,6 +53,7 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     manager = Manager(engine)
     notifier = Notifier(engine)
     rss = RssManager(engine)
+    search = SearchManager(engine)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -71,6 +73,7 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     app.add_middleware(SecurityMiddleware)
     app.state.engine, app.state.auth, app.state.settings, app.state.qb = engine, auth, settings, qb
     app.state.manager, app.state.notifier, app.state.rss = manager, notifier, rss
+    app.state.search = search
 
     # Opt-in "no login" mode for a trusted LAN. Guard rails: never together with NOVA_ALLOW_WAN, never for
     # requests that went through a reverse proxy (X-Forwarded-*), and the completion hook is disabled.
@@ -104,7 +107,9 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         token = request.headers.get("x-csrf-token", "")
         return bool(sess) and hmac.compare_digest(sess[2], token)
 
-    ctx = SimpleNamespace(engine=engine, auth=auth, rss=rss, notifier=notifier, principal=principal, csrf_ok=csrf_ok)
+    ctx = SimpleNamespace(
+        engine=engine, auth=auth, rss=rss, search=search, notifier=notifier, principal=principal, csrf_ok=csrf_ok
+    )
     app.include_router(build_router(ctx))
 
     @app.get("/api/health")

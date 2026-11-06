@@ -18,11 +18,16 @@ MAX_FEED_BYTES = 5 * 1024 * 1024
 EP_RE = re.compile(r"(?i)\bS(\d{1,2})[ ._-]?E(\d{1,3})\b|\b(\d{1,2})x(\d{2,3})\b")
 
 
-def parse_feed(data: bytes) -> list[dict[str, str]]:
+def safe_xml_root(data: bytes) -> ET.Element:
+    """Parse untrusted XML; DTDs/entities are refused (entity expansion attacks)."""
     upper = data.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise ValueError("DTD/entities are not allowed in feeds")
-    root = ET.fromstring(data)
+    return ET.fromstring(data)
+
+
+def parse_feed(data: bytes) -> list[dict[str, str]]:
+    root = safe_xml_root(data)
     items = []
     for it in root.iter("item"):
         title = (it.findtext("title") or "").strip()

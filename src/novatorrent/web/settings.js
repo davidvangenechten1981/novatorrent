@@ -78,7 +78,7 @@ export async function renderSettings(el, { role }) {
     sections.slice(0, 5), notifySection, sections.slice(5), h("div", { id: "extra" })].flat());
   if (!ro) {
     const extra = el.querySelector("#extra");
-    extra.append(await rssSection(), await usersSection(), backupSection());
+    extra.append(await rssSection(), await searchSection(), await usersSection(), backupSection());
   }
 }
 
@@ -112,6 +112,26 @@ async function rssSection() {
             category: r.cat.value, save_path: r.path.value, smart_filter: r.smart.checked, paused: r.paused.checked });
           draw();
         } catch { toast(t("common.error"), true); }
+      } }, t("common.add"))));
+  }
+  await draw();
+  return box;
+}
+
+async function searchSection() {
+  const box = h("section", {});
+  async function draw() {
+    const list = await nova("search/indexers");
+    const n = h("input", { placeholder: t("srch.name") }), u = h("input", { placeholder: t("srch.url"), style: "min-width:260px" });
+    const k = h("input", { type: "password", placeholder: t("srch.key"), autocomplete: "new-password" });
+    box.replaceChildren(h("h3", {}, t("srch.indexers")), h("p", { class: "muted" }, t("srch.help")),
+      h("table", {}, list.map((x) => h("tr", {}, h("td", {}, x.name), h("td", {}, x.url), h("td", {}, x.has_key ? t("srch.has_key") : ""),
+        h("td", {}, h("button", { onclick: async () => {
+          try { const r = await nova(`search/indexers/${x.id}/test`, "POST", {}); toast(r.ok ? t("srch.ok") : `${t("common.error")}: ${r.error}`, !r.ok); } catch { toast(t("common.error"), true); }
+        } }, t("srch.test")),
+        h("button", { class: "danger", onclick: async () => { try { await nova(`search/indexers/${x.id}`, "DELETE"); draw(); } catch { toast(t("common.error"), true); } } }, t("common.delete"))))) ),
+      h("div", { class: "actions", style: "justify-content:flex-start" }, n, u, k, h("button", { onclick: async () => {
+        try { await nova("search/indexers", "POST", { name: n.value, url: u.value, apikey: k.value }); draw(); } catch { toast(t("common.error"), true); }
       } }, t("common.add"))));
   }
   await draw();
