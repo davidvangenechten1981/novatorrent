@@ -84,7 +84,9 @@ class Notifier:
 
     def dispatch(self, event: str, info: dict[str, Any]) -> None:
         s = self.e.settings.snapshot()
-        if event == "completed" and s["nova_hook_enabled"] and s["nova_hook_command"]:
+        # The hook runs a command: never allow it when anyone on the LAN can edit settings without login.
+        hook_allowed = os.environ.get("NOVA_AUTH_DISABLED") != "1"
+        if event == "completed" and hook_allowed and s["nova_hook_enabled"] and s["nova_hook_command"]:
             threading.Thread(target=self._hook, args=(s, info), daemon=True).start()
         if notify_config(s)["events"].get(event):
             try:

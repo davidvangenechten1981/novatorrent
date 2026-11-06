@@ -56,6 +56,8 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await run_in_threadpool(engine.start)
+        if no_auth:
+            engine.add_log("AUTHENTICATION DISABLED (NOVA_AUTH_DISABLED=1): anyone on the LAN has admin access", 4)
         await run_in_threadpool(netmon.start)
         manager.start()
         notifier.start()
@@ -70,13 +72,25 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     app.state.engine, app.state.auth, app.state.settings, app.state.qb = engine, auth, settings, qb
     app.state.manager, app.state.notifier, app.state.rss = manager, notifier, rss
 
+    # Opt-in "no login" mode for a trusted LAN. Guard rails: never together with NOVA_ALLOW_WAN, never for
+    # requests that went through a reverse proxy (X-Forwarded-*), and the completion hook is disabled.
+    no_auth = os.environ.get("NOVA_AUTH_DISABLED") == "1"
+    if no_auth and os.environ.get("NOVA_ALLOW_WAN") == "1":
+        raise RuntimeError("NOVA_AUTH_DISABLED=1 cannot be combined with NOVA_ALLOW_WAN=1")
+    proxy_headers = ("x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "forwarded")
+
+    def anonymous(request: Request) -> bool:
+        return no_auth and not any(h in request.headers for h in proxy_headers)
+
     def principal(request: Request) -> tuple[str, str] | None:
         hdr = request.headers.get("authorization", "")
         if hdr.lower().startswith("bearer "):
             role = auth.check_api_key(hdr[7:].strip())
             return ("apikey", role) if role else None
         sess = auth.get_session(request.cookies.get("SID"))
-        return (sess[0], sess[1]) if sess else None
+        if sess:
+            return (sess[0], sess[1])
+        return ("anonymous", "admin") if anonymous(request) else None
 
     def csrf_ok(request: Request) -> bool:
         """State-changing /api/nova calls need the per-session token; API keys are exempt
@@ -84,6 +98,9 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if request.headers.get("authorization", "").lower().startswith("bearer "):
             return True
         sess = auth.get_session(request.cookies.get("SID"))
+        if not sess and anonymous(request):
+            # no session token exists: fall back to the browser Origin/Referer check
+            return not origin_mismatch(request)
         token = request.headers.get("x-csrf-token", "")
         return bool(sess) and hmac.compare_digest(sess[2], token)
 
@@ -155,6 +172,8 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if origin_mismatch(request):
             return PlainTextResponse("Unauthorized", 401)
         params = await read_params(request)
+        if route == "auth/login" and anonymous(request):
+            return PlainTextResponse("Ok.")  # no login needed; clients that still send credentials keep working
         if route == "auth/login":
             wait = auth.locked_for(ip)
             if wait:
