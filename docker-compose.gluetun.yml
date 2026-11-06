@@ -44,6 +44,7 @@ services:
       NOVA_ADMIN_PASSWORD: ${NOVA_ADMIN_PASSWORD:-}
       NOVA_ALLOWED_HOSTS: ${NOVA_ALLOWED_HOSTS:-}
       NOVA_METRICS: ${NOVA_METRICS:-0}
+      NOVA_AUTH_DISABLED: ${NOVA_AUTH_DISABLED:-0}
       # Kill switch: bind to the tunnel and refuse to run without it.
       NOVA_BIND_INTERFACE: tun0
       NOVA_REQUIRE_VPN: "1"

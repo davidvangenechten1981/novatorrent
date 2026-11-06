@@ -10,7 +10,8 @@ qBittorrent-WebUI-v2-compatibele API, zodat Radarr, Sonarr, Lidarr, Prowlarr-flo
 
 ## Installatie in Portainer
 
-1. Image bouwen en publiceren: tag `v0.1.0` pushen op GitHub (workflow `docker.yml`), of lokaal:
+1. Image bouwen en publiceren: tag `vX.Y.Z` pushen op GitHub (workflow `docker.yml`). **Let op:** het image heet dan
+   `X.Y.Z` (zonder `v`), bijvoorbeeld `ghcr.io/davidvangenechten1981/novatorrent:0.1.2`. Of lokaal:
    `docker build -t novatorrent:latest .` en `NOVA_IMAGE=novatorrent:latest` gebruiken.
 2. Portainer > Stacks > Add stack > plak `docker-compose.yml` (zonder VPN) of `docker-compose.gluetun.yml`.
 3. Variabelen invullen (Environment variables):
@@ -27,6 +28,8 @@ qBittorrent-WebUI-v2-compatibele API, zodat Radarr, Sonarr, Lidarr, Prowlarr-flo
 | `NOVA_ADMIN_PASSWORD` | leeg | eerste wachtwoord; leeg = willekeurig, in `CONFIG_PATH/initial_password.txt` |
 | `NOVA_ALLOWED_HOSTS` | leeg | hostnamen waarmee je de UI opent (bescherming tegen DNS-rebinding) |
 | `NOVA_METRICS` | 0 | `1` zet `/metrics` (Prometheus) aan; vereist inloggen of API-sleutel |
+| `NOVA_AUTH_DISABLED` | 0 | `1` = geen inlog voor directe LAN-verzoeken. Weigert te starten samen met `NOVA_ALLOW_WAN`; verzoeken via een reverse proxy (`X-Forwarded-*`) moeten wel inloggen; het completion-script is dan uit. Houd `NOVA_ALLOWED_HOSTS` gevuld. |
+| `NOVA_RATE_LIMIT` | 30 | aanvragen per seconde per IP |
 | `NOVA_ALLOW_WAN` | niet gezet | standaard weigert NovaTorrent clients buiten het LAN; `1` heft dat op |
 
 Zorg dat `CONFIG_PATH` en `DATA_PATH` schrijfbaar zijn voor `PUID:PGID`. Open daarna `http://NAS:8080`,
