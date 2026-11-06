@@ -74,6 +74,7 @@ class Response:
 OK = Response("Ok.")
 FAILS = Response("Fails.")
 NOT_FOUND = Response("Not Found", 404)
+ROUTE_RE = re.compile(r"^[A-Za-z]{1,20}/[A-Za-z0-9_]{1,40}$")  # keep log entries free of arbitrary text
 
 
 class QbApi:
@@ -81,13 +82,22 @@ class QbApi:
         self.e = engine
         self._rid = 0
         self._snaps: dict[int, dict[str, Any]] = {}
+        self._unsupported: set[str] = set()
 
     # ---- dispatcher ----------------------------------------------------------------------
     def call(self, route: str, p: Params) -> Response:
         fn = getattr(self, "h_" + route.replace("/", "_"), None)
         if not fn:
+            self._note_unsupported(route)
             return NOT_FOUND
         return fn(p)
+
+    def _note_unsupported(self, route: str) -> None:
+        """Log each unknown endpoint once, so real *arr/Cleanuparr traffic shows API gaps."""
+        if route in self._unsupported or len(self._unsupported) >= 200 or not ROUTE_RE.match(route):
+            return
+        self._unsupported.add(route)
+        self.e.add_log(f"Unsupported qBittorrent API call: {route}", 4)
 
     # ---- app ------------------------------------------------------------------------------
     def h_app_version(self, p: Params) -> Response:
