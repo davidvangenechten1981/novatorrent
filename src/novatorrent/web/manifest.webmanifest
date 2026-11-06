@@ -1,0 +1,11 @@
+{
+  "name": "NovaTorrent",
+  "short_name": "NovaTorrent",
+  "description": "Self-hosted BitTorrent client with qBittorrent-compatible API",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#11141b",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

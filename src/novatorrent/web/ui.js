@@ -1,4 +1,5 @@
 // UI helpers: safe DOM builder (text nodes only), i18n, formatting, dialogs.
+import { icon } from "./icons.js";
 let dict = { en: {}, nl: {} };
 let lang = "en";
 try { lang = localStorage.getItem("lang") || (navigator.language || "en").slice(0, 2); } catch { /* storage blocked */ }
@@ -26,7 +27,7 @@ export function h(tag, attrs = {}, ...kids) {
     else if (k in el && typeof v !== "string") el[k] = v;
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const kid of kids.flat()) {
+  for (const kid of kids.flat(Infinity)) {
     if (kid == null || kid === false) continue;
     el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
   }
@@ -53,7 +54,7 @@ export const date = (ts) => (ts > 0 ? new Date(ts * 1000).toLocaleString(lang ==
 let toastTimer;
 export function toast(msg, bad = false) {
   document.querySelectorAll(".toast").forEach((x) => x.remove());
-  const el = h("div", { class: "toast" + (bad ? " bad" : "") }, msg);
+  const el = h("div", { class: "toast" + (bad ? " bad" : ""), role: bad ? "alert" : "status" }, icon(bad ? "alert" : "check", 16), msg);
   document.body.append(el);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.remove(), 3500);
@@ -72,23 +73,29 @@ export function dialog(title, body, actions) {
 }
 export const closeDialogs = () => document.querySelectorAll(".dialog-bg").forEach((x) => x.remove());
 
-export function drawGraph(canvas, series, colors) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = (canvas.width = canvas.clientWidth * dpr), hgt = (canvas.height = canvas.clientHeight * dpr);
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, w, hgt);
-  const css = getComputedStyle(document.documentElement);
-  const max = Math.max(1024, ...series.flat());
-  ctx.strokeStyle = css.getPropertyValue("--line"); ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (hgt * i) / 4); ctx.lineTo(w, (hgt * i) / 4); ctx.stroke(); }
-  series.forEach((s, k) => {
-    ctx.strokeStyle = css.getPropertyValue(colors[k]); ctx.lineWidth = 2 * dpr; ctx.beginPath();
-    s.forEach((v, i) => {
-      const x = (i / Math.max(s.length - 1, 1)) * w, y = hgt - (v / max) * (hgt - 6 * dpr) - 3 * dpr;
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    });
-    ctx.stroke();
-  });
-  ctx.fillStyle = css.getPropertyValue("--muted"); ctx.font = `${11 * dpr}px sans-serif`;
-  ctx.fillText(speed(max) || "0", 4 * dpr, 12 * dpr);
+/** Floating context/dropdown menu. items: [label | { label, icon, fn, danger } | "-"]; closes on outside click/Escape. */
+export function menuAt(x, y, items) {
+  document.querySelectorAll(".menu").forEach((m) => m.remove());
+  const m = h("div", { class: "menu", role: "menu" }, items.map((it) => it === "-" ? h("hr") :
+    h("button", { class: it.danger ? "danger" : "", role: "menuitem", onclick: () => { m.remove(); it.fn(); } }, it.icon ? icon(it.icon, 15) : null, it.label)));
+  document.body.append(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(6, Math.min(x, innerWidth - r.width - 6)) + "px";
+  m.style.top = Math.max(6, Math.min(y, innerHeight - r.height - 6)) + "px";
+  const off = (e) => { if (!m.contains(e.target)) { m.remove(); cleanup(); } };
+  const esc = (e) => { if (e.key === "Escape") { m.remove(); cleanup(); } };
+  const cleanup = () => { document.removeEventListener("pointerdown", off, true); document.removeEventListener("keydown", esc, true); };
+  setTimeout(() => { document.addEventListener("pointerdown", off, true); document.addEventListener("keydown", esc, true); }, 0);
+  return m;
 }
+
+export async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* clipboard needs a secure context */ }
+  const ta = h("textarea", { style: "position:fixed;opacity:0" }, text);
+  document.body.append(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { /* ignore */ }
+  ta.remove();
+  return ok;
+}
+

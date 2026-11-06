@@ -1,4 +1,5 @@
 import { nova, qb } from "./api.js";
+import { icon } from "./icons.js";
 import { dialog, h, t, toast } from "./ui.js";
 
 const sel = (...opts) => ({ type: "select", opts });
@@ -55,32 +56,67 @@ export async function renderSettings(el, { role }) {
   const notify = { ...(prefs.nova_notify || {}), events: { ...(prefs.nova_notify?.events || {}) } };
   let notifyChanged = false;
   const ro = role !== "admin";
+  const msg = h("span", { class: "msg" }, t("set.clean"));
+  const savebar = h("div", { class: "savebar" });
+  const dirty = () => { savebar.classList.add("dirty"); msg.textContent = t("set.dirty"); };
+  const on = (key) => (v) => { changed[key] = v; dirty(); };
 
-  const sections = Object.entries(SCHEMA).map(([name, fields]) => h("section", {}, h("h3", {}, t("sec." + name)),
-    h("div", { class: "grid2" }, fields.map(([key, kind]) => field(t("set." + key), control(kind, prefs[key], (v) => { changed[key] = v; }), kind.type === "bool")))));
+  const sections = Object.entries(SCHEMA).map(([name, fields]) => h("section", { "data-nav": t("sec." + name) }, h("h3", {}, t("sec." + name)),
+    h("div", { class: "grid2" }, fields.map(([key, kind]) => field(t("set." + key), control(kind, prefs[key], on(key)), kind.type === "bool")))));
 
-  const notifySection = h("section", {}, h("h3", {}, t("sec.notify")), h("div", { class: "grid2" },
-    EVENTS.map((ev) => field(t("ev." + ev), control(B, notify.events[ev], (v) => { notify.events[ev] = v; notifyChanged = true; }), true)),
-    NOTIFY_FIELDS.map((k) => field(t("set.notify." + k), control(T, notify[k], (v) => { notify[k] = v; notifyChanged = true; })))),
+  const notifySection = h("section", { "data-nav": t("sec.notify") }, h("h3", {}, t("sec.notify")), h("div", { class: "grid2" },
+    EVENTS.map((ev) => field(t("ev." + ev), control(B, notify.events[ev], (v) => { notify.events[ev] = v; notifyChanged = true; dirty(); }), true)),
+    NOTIFY_FIELDS.map((k) => field(t("set.notify." + k), control(T, notify[k], (v) => { notify[k] = v; notifyChanged = true; dirty(); })))),
   h("div", { class: "actions" }, h("button", { onclick: async () => {
     try { const r = await nova("notify/test", "POST", {}); toast(r.sent_via.join(", ") || t("opt.none")); } catch { toast(t("common.error"), true); }
   } }, t("common.test"))));
 
-  const save = h("button", { class: "primary", disabled: ro, onclick: async () => {
+  const saveBtn = h("button", { class: "primary", disabled: ro, onclick: async () => {
     if (notifyChanged) changed.nova_notify = notify;
     if (changed.proxy_password === "") delete changed.proxy_password;
     try {
       await qb("app/setPreferences", { json: JSON.stringify(changed) });
+      window.dispatchEvent(new CustomEvent("nova:prefs", { detail: { ...changed } }));
+      for (const k of Object.keys(changed)) delete changed[k];
+      notifyChanged = false; savebar.classList.remove("dirty"); msg.textContent = t("set.clean");
       toast(t("common.saved"));
     } catch { toast(t("common.error"), true); }
-  } }, t("common.save"));
+  } }, icon("check", 15), t("common.save"));
+  const discard = h("button", { class: "ghost", onclick: () => renderSettings(el, { role }) }, t("set.discard"));
+  savebar.append(msg, discard, saveBtn);
 
-  el.replaceChildren(...[h("h2", {}, t("set.title")), h("div", { class: "actions", style: "justify-content:flex-start" }, save),
-    sections.slice(0, 5), notifySection, sections.slice(5), h("div", { id: "extra" })].flat());
-  if (!ro) {
-    const extra = el.querySelector("#extra");
-    extra.append(await rssSection(), await searchSection(), await usersSection(), backupSection());
+  const extra = h("div", {});
+  const q = h("input", { type: "search", placeholder: t("set.search"), "aria-label": t("set.search"), oninput: () => applyFilter(q.value) });
+  const nav = h("nav", { class: "snav", "aria-label": t("nav.settings") }, q);
+  const content = h("div", { class: "center-col" }, savebar, sections.slice(0, 5), notifySection, sections.slice(5), extra);
+  el.replaceChildren(h("h2", {}, t("set.title")), h("div", { class: "settings" }, nav, content));
+  if (!ro) extra.append(await rssSection(), await searchSection(), await usersSection(), backupSection());
+
+  const secs = () => [...el.querySelectorAll("section")];
+  function link(sec) {
+    const title = sec.dataset.nav || sec.querySelector("h3")?.textContent || "";
+    return h("a", { role: "link", tabindex: 0, onclick: () => sec.scrollIntoView({ behavior: "smooth", block: "start" }),
+      onkeydown: (e) => { if (e.key === "Enter") sec.scrollIntoView({ block: "start" }); } }, title);
   }
+  const links = secs().map((sec) => ({ sec, a: link(sec) }));
+  nav.append(...links.map((l) => l.a));
+  function applyFilter(query) {
+    const needle = query.trim().toLowerCase();
+    for (const { sec, a } of links) {
+      const title = (sec.dataset.nav || sec.querySelector("h3")?.textContent || "").toLowerCase();
+      const fields = [...sec.querySelectorAll(".field")];
+      let any = !needle || title.includes(needle);
+      for (const f of fields) {
+        const hit = !needle || title.includes(needle) || f.textContent.toLowerCase().includes(needle);
+        f.hidden = !hit; if (hit) any = true;
+      }
+      sec.hidden = !any; a.hidden = !any;
+    }
+  }
+  const io = new IntersectionObserver((entries) => {
+    for (const en of entries) if (en.isIntersecting) { links.forEach((l) => l.a.classList.toggle("on", l.sec === en.target)); }
+  }, { root: el, rootMargin: "0px 0px -70% 0px" });
+  links.forEach((l) => io.observe(l.sec));
 }
 
 async function rssSection() {

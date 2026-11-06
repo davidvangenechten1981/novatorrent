@@ -62,6 +62,15 @@ Gebruik `docker-compose.gluetun.yml`. NovaTorrent deelt de netwerkstack van Glue
 7. Cleanuparr: kies "qBittorrent" als client met dezelfde gegevens.
 8. Homepage-widget: `type: qbittorrent`, `url`, `username`, `password` (of een view-only gebruiker). Uptime Kuma: HTTP-monitor op `/api/health`.
 
+## Webinterface
+
+Donker thema als standaard (licht via de zon/maan-knop; de keuze wordt onthouden). Bovenaan een statusstrook met live snelheid
+(minigrafiek), VPN-status en vrije ruimte. Tips: rechtermuisknop op een torrent geeft een menu; sleep een `.torrent`-bestand of
+een magnetlink ergens op de pagina om hem toe te voegen; sleep de rand boven het detailpaneel om het hoger of lager te zetten;
+de snelheid staat ook in de titel van het browsertabblad. Op een telefoon verschijnen torrents als kaarten met een onderbalk.
+Instellingen heeft een zijmenu, een zoekveld en een opslaan-balk die "niet-opgeslagen wijzigingen" toont. De statistiekpagina heeft
+een snelheidsgrafiek (met tabelweergave en muisaanwijzer) en een balk per status.
+
 ## Schijfruimte, geheugen en onbekende API-aanroepen
 
 - **Schijfruimte:** onder `nova_min_free_space_mb` (standaard 1024 MiB) pauzeert NovaTorrent downloads. Daarboven geeft

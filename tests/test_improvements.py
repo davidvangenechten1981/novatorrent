@@ -45,3 +45,11 @@ def test_early_disk_warning_without_pausing(tmp_path):
         assert "disk_full" in events and e.list_info()[0]["state"] == "pausedDL"
     finally:
         e.stop()
+
+
+def test_static_ui_files_are_revalidated_but_api_is_untouched(client):
+    r = client.get("/app.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache" and r.headers.get("etag")
+    assert client.get("/manifest.webmanifest").status_code == 200
+    assert client.get("/icon.svg").headers["content-type"].startswith("image/svg")
+    assert "cache-control" not in client.get("/api/v2/app/version").headers

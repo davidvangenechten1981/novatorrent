@@ -83,4 +83,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "no-referrer")
         resp.headers.setdefault("Content-Security-Policy", CSP)
+        if not request.url.path.startswith("/api/"):
+            # Static UI files: always revalidate (ETag), so a browser never keeps running JS from an older version.
+            resp.headers.setdefault("Cache-Control", "no-cache")
         return resp
