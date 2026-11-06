@@ -14,11 +14,12 @@ import httpx
 
 from .engine import Engine
 
-EVENTS = ("added", "completed", "error", "disk_full", "vpn_down", "vpn_up", "seed_limit")
+EVENTS = ("added", "completed", "error", "disk_low", "disk_full", "vpn_down", "vpn_up", "seed_limit")
 DEFAULT_EVENTS = {
     "added": False,
     "completed": True,
     "error": True,
+    "disk_low": True,
     "disk_full": True,
     "vpn_down": True,
     "vpn_up": False,
@@ -57,6 +58,7 @@ def render(event: str, info: dict[str, Any]) -> str:
         "added": f"Added: {name}",
         "completed": f"Finished: {name}",
         "error": f"Error: {info.get('message', name)}",
+        "disk_low": f"Disk space getting low ({info.get('free_mb', '?')} MiB free)",
         "disk_full": f"Low disk space ({info.get('free_mb', '?')} MiB free), downloads paused",
         "vpn_down": f"VPN/binding lost: {info.get('reason', '')}",
         "vpn_up": "VPN/binding restored",

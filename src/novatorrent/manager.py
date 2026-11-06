@@ -68,6 +68,7 @@ class Manager:
         self._thread: threading.Thread | None = None
         self.paused_for_space: set[str] = set()
         self.disk_alerted = False
+        self.disk_warned = False
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, name="manager", daemon=True)
@@ -126,11 +127,15 @@ class Manager:
     # ---- disk space -----------------------------------------------------------------------
     def _disk_guard(self, s: dict[str, Any], infos: list[dict[str, Any]]) -> None:
         need = int(s["nova_min_free_space_mb"]) * 1024 * 1024
-        if need <= 0:
+        warn = int(s.get("nova_warn_free_space_mb", 0)) * 1024 * 1024
+        if need <= 0 and warn <= 0:
             return
         try:
             free = self.free_space(s["save_path"])
         except OSError:
+            return
+        self._disk_warning(free, warn, need)
+        if need <= 0:
             return
         if free < need:
             for i in infos:
@@ -151,6 +156,16 @@ class Manager:
                 self.e.resume(h)
                 self.paused_for_space.discard(h)
             self.disk_alerted = False
+
+    def _disk_warning(self, free: int, warn: int, need: int) -> None:
+        """One early warning between the warn level and the pause level (downloads keep running)."""
+        if warn > 0 and warn > need and need <= free < warn:
+            if not self.disk_warned:
+                self.disk_warned = True
+                self.e.add_log(f"Disk space getting low ({free // 2**20} MiB free)", 4)
+                self.e.on_event("disk_low", {"free_mb": free // 2**20})
+        elif free > warn * 1.2:  # hysteresis: re-arm only after clearly recovering
+            self.disk_warned = False
 
     # ---- first/last piece priority ----------------------------------------------------------
     def _first_last(self, infos: list[dict[str, Any]]) -> None:

@@ -62,6 +62,17 @@ Gebruik `docker-compose.gluetun.yml`. NovaTorrent deelt de netwerkstack van Glue
 7. Cleanuparr: kies "qBittorrent" als client met dezelfde gegevens.
 8. Homepage-widget: `type: qbittorrent`, `url`, `username`, `password` (of een view-only gebruiker). Uptime Kuma: HTTP-monitor op `/api/health`.
 
+## Schijfruimte, geheugen en onbekende API-aanroepen
+
+- **Schijfruimte:** onder `nova_min_free_space_mb` (standaard 1024 MiB) pauzeert NovaTorrent downloads. Daarboven geeft
+  `nova_warn_free_space_mb` (standaard 5120 MiB, 0 = uit) één vroege waarschuwing (log + melding "Schijfruimte laag") zonder te pauzeren.
+  Handig als je lokaal blijft seeden terwijl Radarr/Sonarr naar een andere NAS kopiëren.
+- **Geheugen bij veel torrents:** Instellingen > Limieten > "Max. onthouden peers per torrent" (standaard 3000, de libtorrent-standaard).
+  Zet bijvoorbeeld 500 bij honderden torrents. Waarden onder 100 worden begrensd. De disk-I/O-backend (mmap/pread) is met de huidige
+  libtorrent-Python-bindings niet te kiezen.
+- **Onbekende API-aanroepen:** roept een app (Radarr, Sonarr, Cleanuparr, Seerr...) een qBittorrent-endpoint aan dat NovaTorrent
+  niet kent, dan staat dat één keer per endpoint als waarschuwing in de log ("Unsupported ..."). Zo zie je echte compatibiliteitsgaten.
+
 ## Zoeken in je indexers (Torznab)
 
 NovaTorrent kan zoeken in je eigen Torznab-indexers (bijvoorbeeld die van Prowlarr) en een resultaat met één klik toevoegen.

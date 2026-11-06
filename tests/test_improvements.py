@@ -17,3 +17,31 @@ def test_peerlist_size_is_configurable(client):
     assert eng.ses.get_settings()["max_peerlist_size"] == 500
     client.post("/api/v2/app/setPreferences", data={"json": '{"nova_max_peerlist_size": 1}'})
     assert eng.ses.get_settings()["max_peerlist_size"] == 100  # clamped, 0/tiny values would break peer discovery
+
+
+def test_early_disk_warning_without_pausing(tmp_path):
+    from novatorrent.manager import Manager
+    from test_automation import make_engine
+
+    e = make_engine(tmp_path, "a", 0)
+    try:
+        e.add(magnet="magnet:?xt=urn:btih:" + "e" * 40)
+        e.settings.update({"nova_min_free_space_mb": 1024, "nova_warn_free_space_mb": 5120})
+        free = {"v": 3 * 2**30}  # between pause level (1 GiB) and warning level (5 GiB)
+        events = []
+        e.on_event = lambda n, i: events.append(n)
+        m = Manager(e, free_space=lambda p: free["v"])
+        m.tick()
+        m.tick()
+        assert events == ["disk_low"]  # warned once, not repeatedly
+        assert not e.list_info()[0]["state"].startswith("paused")  # downloads keep running
+        free["v"] = 20 * 2**30
+        m.tick()
+        free["v"] = 3 * 2**30
+        m.tick()
+        assert events == ["disk_low", "disk_low"]  # re-armed after recovering
+        free["v"] = 100 * 2**20  # below pause level: the existing guard takes over
+        m.tick()
+        assert "disk_full" in events and e.list_info()[0]["state"] == "pausedDL"
+    finally:
+        e.stop()

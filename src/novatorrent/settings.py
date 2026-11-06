@@ -83,6 +83,7 @@ DEFAULTS: dict[str, Any] = {
     "nova_ip_filter_interval_h": 24,
     # disk / misc
     "nova_min_free_space_mb": 1024,
+    "nova_warn_free_space_mb": 5120,  # early warning only (0 = off); downloads pause at nova_min_free_space_mb
     "nova_max_peerlist_size": 3000,  # libtorrent default; lower (e.g. 500) saves memory with many torrents
     "nova_sequential_default": False,
     "nova_extra_trackers_enabled": False,

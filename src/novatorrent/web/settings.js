@@ -9,7 +9,7 @@ const B = { type: "bool" }, I = { type: "int" }, F = { type: "float" }, T = { ty
 // section -> [key, kind]. Labels come from i18n key set.<key>; sections from sec.<name>.
 const SCHEMA = {
   downloads: [["save_path", T], ["temp_path_enabled", B], ["temp_path", T], ["start_paused_enabled", B], ["preallocate_all", B],
-    ["nova_min_free_space_mb", I], ["nova_sequential_default", B]],
+    ["nova_min_free_space_mb", I], ["nova_warn_free_space_mb", I], ["nova_sequential_default", B]],
   limits: [["dl_limit", I], ["up_limit", I], ["alt_dl_limit", I], ["alt_up_limit", I], ["alt_speed_active", B], ["scheduler_enabled", B],
     ["schedule_from_hour", I], ["schedule_from_min", I], ["schedule_to_hour", I], ["schedule_to_min", I], ["scheduler_days", DAYS],
     ["max_connec", I], ["max_connec_per_torrent", I], ["max_uploads", I], ["max_uploads_per_torrent", I],
@@ -30,7 +30,7 @@ const SCHEMA = {
   hooks: [["nova_hook_enabled", B], ["nova_hook_command", T]],
 };
 const NOTIFY_FIELDS = ["discord_url", "ntfy_url", "telegram_token", "telegram_chat", "webhook_url"];
-const EVENTS = ["added", "completed", "error", "disk_full", "vpn_down", "vpn_up", "seed_limit"];
+const EVENTS = ["added", "completed", "error", "disk_low", "disk_full", "vpn_down", "vpn_up", "seed_limit"];
 
 function control(kind, value, onchange) {
   if (kind.type === "bool") return h("input", { type: "checkbox", checked: !!value, onchange: (e) => onchange(e.target.checked) });
