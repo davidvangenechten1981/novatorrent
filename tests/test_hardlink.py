@@ -21,8 +21,9 @@ def test_hardlink_import_keeps_seeding_and_survives_delete(tmp_path):
         b.add(data=data)
 
         def done() -> bool:
-            if not b.peers(h):
-                b.handle(h).connect_peer(("127.0.0.1", pa))
+            handle = b.handle(h)  # may still be None right after add()
+            if handle and not b.peers(h):  # keep (re)connecting until the swarm link is up
+                handle.connect_peer(("127.0.0.1", pa))
             return b.list_info()[0]["progress"] == 1.0
 
         assert wait(done, 60), "download did not finish"
@@ -48,7 +49,7 @@ def test_hardlink_import_keeps_seeding_and_survives_delete(tmp_path):
         # Cleanuparr/Sonarr "remove torrent + files": the library copy must stay intact
         assert b.remove(h, delete_files=True)
         assert wait(lambda: not downloaded.exists())
-        assert link.read_bytes() == src.read_bytes()
+        assert wait(lambda: link.read_bytes() == src.read_bytes(), 5), "library copy incomplete"
     finally:
         a.stop()
         b.stop()

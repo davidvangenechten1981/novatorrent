@@ -63,12 +63,15 @@ def test_download_and_seed_between_instances(tmp_path):
         b.add(data=data)
 
         def done() -> bool:
-            if not b.peers(h):  # keep (re)connecting until the swarm link is up
-                b.handle(h).connect_peer(("127.0.0.1", pa))
+            handle = b.handle(h)  # may still be None right after add()
+            if handle and not b.peers(h):  # keep (re)connecting until the swarm link is up
+                handle.connect_peer(("127.0.0.1", pa))
             return b.list_info()[0]["progress"] == 1.0
 
         assert wait(done, 60), "download did not finish"
-        assert (tmp_path / "b-dl" / src.name).read_bytes() == src.read_bytes()
+        # libtorrent's mmap writes can take a few tens of ms to be visible to a plain file read on Windows
+        # (seen under CPU load); the data must be complete shortly after progress reaches 1.0.
+        assert wait(lambda: (tmp_path / "b-dl" / src.name).read_bytes() == src.read_bytes(), 5), "file incomplete"
         assert wait(lambda: b.list_info()[0]["completion_on"] > 0)
         assert wait(lambda: a.list_info()[0]["uploaded"] > 0)
     finally:
