@@ -91,6 +91,7 @@ def build_settings_pack(s: dict[str, Any], partial: bool = False) -> dict[str, A
         "download_rate_limit": dl,
         "upload_rate_limit": ul,
         "connections_limit": int(s.get("max_connec", 500)),
+        "max_peerlist_size": max(int(s.get("nova_max_peerlist_size", 3000)), 100),
         "unchoke_slots_limit": int(s.get("max_uploads", 20)),
         "active_downloads": _q(s, "max_active_downloads"),
         "active_seeds": _q(s, "max_active_uploads"),
